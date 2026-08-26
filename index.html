@@ -41,6 +41,11 @@ h1,h2,h3,.serif{font-family:Georgia,"Times New Roman",serif;letter-spacing:.2px}
 .chat-input{display:flex;gap:6px;padding:10px;border-top:1px solid var(--beige-line);background:#fff}
 .chat-input input{flex:1;border:1px solid var(--beige-line);border-radius:10px;padding:9px 12px;font-size:14px;background:var(--cream);color:var(--ink)}
 .chat-input button{background:var(--brand);color:#fff;border:none;border-radius:10px;width:42px;cursor:pointer;font-size:16px}
+.typing{display:inline-flex;gap:4px;padding:3px 2px}
+.typing i{width:7px;height:7px;border-radius:50%;background:var(--muted);display:inline-block;animation:tdot 1s infinite}
+.typing i:nth-child(2){animation-delay:.15s}
+.typing i:nth-child(3){animation-delay:.3s}
+@keyframes tdot{0%,60%,100%{opacity:.35;transform:translateY(0)}30%{opacity:1;transform:translateY(-3px)}}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--brand);color:#fff;border:none;padding:12px 22px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;text-decoration:none;transition:background .15s}
 .btn:hover{background:var(--brand-dark)}
 .btn:disabled{background:#c9c2b6;cursor:not-allowed}
@@ -667,9 +672,29 @@ const DEFAULT_FAQS=[
 ];
 async function reloadFaqs(){const f=await sbGet('faqs?select=*&order=id');FAQS=f.map(x=>({q:((x.keywords||'')+' '+(x.answer_en||'')).toLowerCase(),a_en:x.answer_en,a_de:x.answer_de||x.answer_en,id:x.id,keywords:x.keywords,answer_en:x.answer_en,answer_de:x.answer_de}))}
 function matchFaq(t){const all=FAQS.concat(DEFAULT_FAQS);const words=t.split(/[^a-z0-9äöüßא-ת]+/i).filter(w=>w.length>2);let best=null,bs=0;for(const f of all){const kw=(f.q||'').toLowerCase();let s=0;for(const w of words){if(kw.indexOf(w)>=0)s++}if(s>bs){bs=s;best=f}}return bs>=1?best:null}
+function rnd(a){return a[Math.floor(Math.random()*a.length)]}
+function waLine(){return L(`just message us on WhatsApp and we'll get right back to you: <a href="${WA_LINK}" target="_blank">${WA_SHOW}</a> 🙂`,`schreiben Sie uns einfach auf WhatsApp, wir melden uns sofort: <a href="${WA_LINK}" target="_blank">${WA_SHOW}</a> 🙂`)}
+function fallbackAnswer(t){
+ let topic=L('that','das');
+ const cats=[
+  [/(breakfast|food|eat|restaurant|dinner|coffee|essen|frühstück|אוכל|מסעדה|ארוחה|קפה)/,L('food and places to eat nearby','Essen in der Nähe')],
+  [/(see|do|attraction|tour|visit|sightsee|museum|sehenswür|besichtig|לראות|אטרקצ|סיור|מוזיאון)/,L('things to see and do','Sehenswürdigkeiten')],
+  [/(baby|crib|cot|child|family|kinderbett|תינוק|לול|משפחה|ילד)/,L('family and kids','Familie & Kinder')],
+  [/(clean|cleaning|housekeep|reinig|putz|ניקיון)/,L('cleaning','Reinigung')],
+  [/(key|access|door|code|entry|schlüssel|zugang|מפתח|כניסה|קוד)/,L('keys and access','Schlüssel & Zugang')],
+  [/(noise|quiet|neighbou|lärm|ruhe|רעש|שקט|שכנים)/,L('the neighbourhood','die Nachbarschaft')],
+  [/(iron|dryer|washer|laundry|waschen|כביסה|מייבש)/,L('laundry','Wäsche')]
+ ];
+ for(var i=0;i<cats.length;i++){if(cats[i][0].test(t)){topic=cats[i][1];break}}
+ const en=[`Good question! I don't have the exact details on ${topic} right here — the quickest way is that you `,`Hmm, I'm honestly not sure about ${topic} — best is you `,`That's a little beyond what I can see about ${topic}. To be safe, `];
+ const de=[`Gute Frage! Zu ${topic} habe ich hier gerade keine genauen Infos — am schnellsten ist es, wenn Sie `,`Ehrlich gesagt bin ich mir bei ${topic} nicht sicher — am besten `,`Das geht etwas über das hinaus, was ich zu ${topic} sehe. Um sicherzugehen, `];
+ return L(rnd(en),rnd(de))+waLine();
+}
 function assistantAnswer(qraw){
  const t=qraw.toLowerCase();
- if(/^(hi|hey|hello|hallo|servus|good|שלום|היי|הי)\b/.test(t))return L("Hi! 👋 I can help with our Vienna apartments — prices, availability, group stays and booking. What would you like to know?","Hallo! 👋 Ich helfe mit unseren Wiener Apartments — Preise, Verfügbarkeit, Gruppen und Buchung. Was möchten Sie wissen?");
+ if(/(thank|thanks|thx|danke|תודה|תודה רבה)/.test(t))return rnd([L("You're very welcome! Anything else I can help with? 😊","Sehr gerne! Kann ich sonst noch etwas tun? 😊"),L("Anytime! 🙂 Just say the word.","Jederzeit! 🙂")]);
+ if(/^(bye|goodbye|see you|good night|tschüss|ciao|ביי|להתראות|לילה טוב)/.test(t))return L("Take care — we'd love to host you in Vienna! 👋","Machen Sie's gut — wir würden uns freuen, Sie in Wien begrüßen zu dürfen! 👋");
+ if(/^(hi|hey|hello|hallo|servus|good\s|guten|heya|yo|שלום|היי|הי|מה נשמע|אהלן)/.test(t))return rnd([L("Hey there! 👋 How can I help — prices, availability, a bigger group, or booking?","Hallo! 👋 Wie kann ich helfen — Preise, Verfügbarkeit, größere Gruppe oder Buchung?"),L("Hi! 😊 Happy to help — ask me anything about the apartments.","Hallo! 😊 Ich helfe gerne — fragen Sie mich alles zu den Apartments."),L("Hello! 👋 What can I tell you about our Vienna apartments?","Hallo! 👋 Was möchten Sie über unsere Wiener Apartments wissen?")]);
  if(/(price|prices|cost|how much|rate|expensive|preis|kostet|teuer|מחיר|מחירים|כמה עולה|כמה זה)/.test(t)){const list=UNITS.map(u=>`• ${esc(u.name)}: ${CUR}${u.basePricePerNight} ${L('per night','pro Nacht')} (${L('up to','bis')} ${u.maxGuests} ${L('guests','Gäste')})`).join('<br>');return L('Here are our nightly prices:<br>'+list+'<br><br>Prices can vary by season — the exact total appears when you choose dates.','Unsere Preise pro Nacht:<br>'+list+'<br><br>Preise können saisonal variieren — der genaue Gesamtpreis erscheint bei der Datumsauswahl.')}
  if(/(people|persons|guests|sleep|fit|group|families|kids|children|אנשים|קבוצה|כמה אנשים|ילדים|personen|gäste|gruppe|leute|kinder)/.test(t)){const mx=Math.max.apply(null,UNITS.map(u=>u.maxGuests));const tot=UNITS.reduce((s,u)=>s+u.maxGuests,0);return L(`A single apartment sleeps up to ${mx} guests. For larger groups we automatically combine apartments into one booking (together up to ${tot} guests) — just enter the number of guests when you search.`,`Ein Apartment beherbergt bis zu ${mx} Gäste. Für größere Gruppen kombinieren wir Apartments automatisch zu einer Buchung (zusammen bis zu ${tot} Gäste) — geben Sie einfach die Gästezahl bei der Suche ein.`)}
  if(/(availa|free|vacan|open date|verfügbar|frei|belegt|פנוי|זמין|תאריכים|פנויים)/.test(t))return L("To check availability, enter your check-in / check-out dates and number of guests in the search box at the top and press Search — you'll see exactly what's free.","Für die Verfügbarkeit geben Sie oben Anreise/Abreise und Gästezahl ein und klicken auf Suchen — Sie sehen sofort, was frei ist.");
@@ -678,13 +703,16 @@ function assistantAnswer(qraw){
  if(/(minimum|min night|how many night|nights|mindest|nächte|übernacht|מינימום|לילות|כמה לילות)/.test(t))return L('The minimum stay is 2 nights.','Der Mindestaufenthalt beträgt 2 Nächte.');
  if(/(pay|payment|deposit|card|credit|zahl|bezahl|kreditkarte|anzahlung|תשלום|לשלם|כרטיס|מקדמה)/.test(t))return L('Payment is made in full at booking, by card. Your booking is confirmed the moment payment succeeds.','Die Zahlung erfolgt vollständig bei der Buchung per Karte. Ihre Buchung wird bestätigt, sobald die Zahlung erfolgreich ist.');
  if(/(book|booking|reserve|reservation|how do i|order|buchen|reservier|bestell|להזמין|איך מזמינים|הזמנה|לבצע)/.test(t))return L('Booking is easy: pick your dates and guests above, choose an apartment, and pay securely. You get an instant confirmation with a reference number.','Buchen ist einfach: oben Daten und Gäste wählen, Apartment auswählen und sicher bezahlen. Sie erhalten sofort eine Bestätigung mit Buchungsnummer.');
+ if(/(amenit|include|included|equipped|towel|linen|bed|bathroom|shower|hair.?dry|ausstattung|inklusive|handtuch|bad|dusche|מה יש|כלול|מגבות|מיטה|מקלחת)/.test(t))return L("Every apartment has fast Wi-Fi, a full kitchenette, fresh linens and towels, and a private bathroom — everything you need for a comfortable, self-guided stay. Was there something specific you wanted to check?","Jedes Apartment bietet schnelles WLAN, eine voll ausgestattete Küchenzeile, frische Bettwäsche und Handtücher sowie ein eigenes Bad — alles für einen komfortablen Aufenthalt. Wollten Sie etwas Bestimmtes wissen?");
+ if(/(airport|transfer|taxi|train|metro|u-.?bahn|tram|bus|get there|pick.?up|flughafen|bahnhof|נמל תעופה|שדה תעופה|רכבת|מונית|תחבורה|הסעה)/.test(t))return L(`Central Vienna is really well connected by U-Bahn, tram and bus, and the airport is roughly 20–30 minutes away. If you'd like a specific transfer or pickup arranged, ${waLine()}`,`Das Zentrum Wiens ist mit U-Bahn, Straßenbahn und Bus super erreichbar, und der Flughafen ist etwa 20–30 Minuten entfernt. Für einen konkreten Transfer oder eine Abholung ${waLine()}`);
+ if(/(discount|deal|offer|coupon|promo|special|long.?stay|weekly|monthly|rabatt|angebot|gutschein|langzeit|הנחה|קופון|מבצע|לחודש|לשבוע|מחיר מיוחד)/.test(t))return L(`We do run promo codes now and then — you can pop one in at checkout. For a longer stay or a special rate, ${waLine()}`,`Wir haben ab und zu Rabattcodes — den können Sie an der Kasse eingeben. Für längere Aufenthalte oder Sonderpreise ${waLine()}`);
  const f=matchFaq(t);
  if(f)return L(f.a_en,f.a_de);
- return L(`I'm not sure about that one 🤔 For anything else, message us on WhatsApp: <a href="${WA_LINK}" target="_blank">${WA_SHOW}</a>`,`Das weiß ich leider nicht genau 🤔 Für alles Weitere schreiben Sie uns auf WhatsApp: <a href="${WA_LINK}" target="_blank">${WA_SHOW}</a>`);
+ return fallbackAnswer(t);
 }
 function chatWidget(){
  if(!state.chatOpen)return `<div class="chat-fab" onclick="toggleChat()" title="${L('Chat with us','Chatten Sie mit uns')}">💬</div>`;
- const msgs=state.chatMsgs.map(m=>`<div class="cmsg ${m.role}">${m.role==='user'?esc(m.text):m.text}</div>`).join('');
+ const msgs=state.chatMsgs.map(m=>`<div class="cmsg ${m.role}">${m.text==='__typing__'?'<span class="typing"><i></i><i></i><i></i></span>':(m.role==='user'?esc(m.text):m.text)}</div>`).join('');
  const sugg=state.chatMsgs.length<=1?`<div class="chat-sugg">${[[L('Prices?','Preise?')],[L('Room for 8 people?','Platz für 8?')],[L('Where are you located?','Wo liegt ihr?')],[L('How do I book?','Wie buche ich?')]].map(s=>`<button onclick="chatAsk(this.textContent)">${s[0]}</button>`).join('')}</div>`:'';
  return `<div class="chat-fab" onclick="toggleChat()">✕</div>
  <div class="chat-panel">
@@ -694,8 +722,9 @@ function chatWidget(){
  </div>`;
 }
 function toggleChat(){state.chatOpen=!state.chatOpen;if(state.chatOpen&&state.chatMsgs.length===0)state.chatMsgs.push({role:'bot',text:L("Hi! 👋 I'm the Vienna Stay assistant. Ask me about prices, availability, group stays, booking, or anything about the apartments.","Hallo! 👋 Ich bin der Vienna-Stay-Assistent. Fragen Sie mich zu Preisen, Verfügbarkeit, Gruppen, Buchung oder den Apartments.")});render();scrollChat()}
-function chatAsk(q){state.chatMsgs.push({role:'user',text:q});state.chatMsgs.push({role:'bot',text:assistantAnswer(q)});render();scrollChat()}
-function sendChat(){const el=document.getElementById('chatInp');const q=(el&&el.value||'').trim();if(!q)return;state.chatMsgs.push({role:'user',text:q});state.chatMsgs.push({role:'bot',text:assistantAnswer(q)});render();scrollChat()}
+function pushBot(q){const ans=assistantAnswer(q);state.chatMsgs.push({role:'bot',text:'__typing__'});render();scrollChat();const delay=550+Math.min(1400,q.length*30)+Math.random()*400;setTimeout(function(){for(var i=state.chatMsgs.length-1;i>=0;i--){if(state.chatMsgs[i].text==='__typing__'){state.chatMsgs.splice(i,1);break}}state.chatMsgs.push({role:'bot',text:ans});render();scrollChat()},delay)}
+function chatAsk(q){state.chatMsgs.push({role:'user',text:q});render();scrollChat();pushBot(q)}
+function sendChat(){const el=document.getElementById('chatInp');const q=(el&&el.value||'').trim();if(!q)return;state.chatMsgs.push({role:'user',text:q});render();scrollChat();pushBot(q)}
 function scrollChat(){setTimeout(function(){const b=document.getElementById('chatBody');if(b)b.scrollTop=b.scrollHeight;const i=document.getElementById('chatInp');if(i)i.focus()},30)}
 
 /* TIMER */
