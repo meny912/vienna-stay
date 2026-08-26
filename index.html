@@ -25,6 +25,22 @@ h1,h2,h3,.serif{font-family:Georgia,"Times New Roman",serif;letter-spacing:.2px}
 .langsw{margin-left:20px;border-left:1px solid rgba(255,255,255,.3);padding-left:14px}
 .langsw a{margin-left:8px;font-size:13px;opacity:.8}
 .langsw a.on{opacity:1;font-weight:700;text-decoration:underline}
+.chat-fab{position:fixed;right:20px;bottom:20px;width:56px;height:56px;border-radius:50%;background:var(--brand);color:#fff;display:grid;place-items:center;font-size:24px;cursor:pointer;box-shadow:0 6px 20px rgba(70,60,48,.28);z-index:300;user-select:none}
+.chat-fab:hover{background:var(--brand-dark)}
+.chat-panel{position:fixed;right:20px;bottom:88px;width:350px;max-width:calc(100vw - 40px);height:480px;max-height:calc(100vh - 120px);background:#fff;border:1px solid var(--beige-line);border-radius:16px;box-shadow:0 14px 44px rgba(70,60,48,.28);display:flex;flex-direction:column;overflow:hidden;z-index:300}
+.chat-head{background:var(--brand);color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;font-family:Georgia,serif}
+.chat-body{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:8px;background:var(--cream)}
+.cmsg{max-width:84%;padding:9px 12px;border-radius:13px;font-size:14px;line-height:1.45}
+.cmsg.bot{background:#fff;border:1px solid var(--beige-line);align-self:flex-start;border-bottom-left-radius:3px}
+.cmsg.user{background:var(--brand);color:#fff;align-self:flex-end;border-bottom-right-radius:3px}
+.cmsg a{color:var(--brand-dark);font-weight:600}
+.cmsg.user a{color:#fff}
+.chat-sugg{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.chat-sugg button{background:#fff;border:1px solid var(--beige-line);border-radius:999px;padding:6px 12px;font-size:12px;cursor:pointer;color:var(--brand-dark)}
+.chat-sugg button:hover{background:var(--beige)}
+.chat-input{display:flex;gap:6px;padding:10px;border-top:1px solid var(--beige-line);background:#fff}
+.chat-input input{flex:1;border:1px solid var(--beige-line);border-radius:10px;padding:9px 12px;font-size:14px;background:var(--cream);color:var(--ink)}
+.chat-input button{background:var(--brand);color:#fff;border:none;border-radius:10px;width:42px;cursor:pointer;font-size:16px}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--brand);color:#fff;border:none;padding:12px 22px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;text-decoration:none;transition:background .15s}
 .btn:hover{background:var(--brand-dark)}
 .btn:disabled{background:#c9c2b6;cursor:not-allowed}
@@ -212,9 +228,9 @@ async function reloadUnits(){const u=await sbGet('units?select=*&order=id');if(u
 async function reloadSeasons(){const s=await sbGet('seasonal_rates?select=*&order=id');SEASONAL.length=0;s.map(sFromDb).forEach(x=>SEASONAL.push(x))}
 async function reloadCodes(){const c=await sbGet('discount_codes?select=*&order=code');if(c.length){CODES.length=0;c.map(cFromDb).forEach(x=>CODES.push(x))}}
 async function reloadBookings(){const b=await sbGet('bookings?select=*');bookings.length=0;b.map(bFromDb).forEach(x=>bookings.push(x))}
-async function loadAll(){await Promise.all([reloadUnits(),reloadSeasons(),reloadCodes(),reloadBookings()]);render()}
+async function loadAll(){await Promise.all([reloadUnits(),reloadSeasons(),reloadCodes(),reloadBookings(),reloadFaqs()]);render()}
 
-const state={screen:'home',checkIn:iso(14),checkOut:iso(17),guests:2,selectedUnitIds:null,bookingId:null,guest:{name:'',email:'',phone:''},promo:'',discount:null,promoError:'',cancelId:null,mb:{email:'',ref:'',searched:false,results:[]},adminTab:'dashboard',adminFilter:'all',adminSearch:'',auser:'',apass:'',adminErr:'',pickerOpen:null,pickerMonth:null,lang:(function(){try{return localStorage.getItem('vs-lang')||'en'}catch(e){return 'en'}})()};
+const state={screen:'home',checkIn:iso(14),checkOut:iso(17),guests:2,selectedUnitIds:null,bookingId:null,guest:{name:'',email:'',phone:''},promo:'',discount:null,promoError:'',cancelId:null,mb:{email:'',ref:'',searched:false,results:[]},adminTab:'dashboard',adminFilter:'all',adminSearch:'',auser:'',apass:'',adminErr:'',pickerOpen:null,pickerMonth:null,chatOpen:false,chatMsgs:[],lang:(function(){try{return localStorage.getItem('vs-lang')||'en'}catch(e){return 'en'}})()};
 let adminAuthed=false;
 const ADMIN_USER='manager',ADMIN_PASS='vienna2026';
 const L=(en,de)=>state.lang==='de'?de:en;
@@ -257,7 +273,7 @@ function render(){
  else if(state.screen==='confirmation')b=confirmationS();
  else if(state.screen==='mybookings')b=mbS();
  else if(state.screen==='adminlogin')b=adminLoginS();
- root.innerHTML=header()+'<main>'+b+'</main>'+footer();
+ root.innerHTML=header()+'<main>'+b+'</main>'+footer()+chatWidget();
  if(state.screen==='booking'||state.screen==='payment')startTimer();
 }
 
@@ -447,6 +463,7 @@ function adminLayout(){
  else if(state.adminTab==='guests')main=admGuests();
  else if(state.adminTab==='tasks')main=admTasks();
  else if(state.adminTab==='invoices')main=admInvoices();
+ else if(state.adminTab==='assistant')main=admFaqs();
  return `<div class="admin-top"><div class="brand">☁ my Vienna Stay · Cockpit</div><div><a onclick="go('home')">↗ View booking site</a><a onclick="adminLogout()">Log out</a></div></div>
  <div class="admin-layout">
   <nav class="admin-side">
@@ -460,6 +477,7 @@ function adminLayout(){
    <a class="${A('guests')}" onclick="adminGo('guests')">👤 Guests</a>
    <a class="${A('tasks')}" onclick="adminGo('tasks')">✓ Tasks</a>
    <a class="${A('invoices')}" onclick="adminGo('invoices')">▧ Invoices</a>
+   <a class="${A('assistant')}" onclick="adminGo('assistant')">💬 Assistant</a>
    <div class="grp">More</div>
    <a class="${A('channels')}" onclick="adminGo('channels')">↔ Channel manager</a>
    <a class="${A('reports')}" onclick="adminGo('reports')">▤ Reports</a>
@@ -622,6 +640,63 @@ function admSettings(){
   <div class="panel"><strong>Manager login</strong><div class="form-grid" style="margin-top:10px"><div><label class="lbl">Username</label><input class="ctrl" value="manager"></div><div><label class="lbl">Password</label><input class="ctrl" type="password" value="vienna2026"></div></div><p class="muted" style="font-size:12px;margin-bottom:0">Demo — in the live system these are stored securely.</p></div>
   <div style="margin-top:12px"><button class="btn" onclick="alert('Settings saved (demo).')">Save changes</button></div>`;
 }
+
+function admFaqs(){
+ const rows=FAQS.map(f=>`<tr><td>${esc(f.keywords||'')}</td><td>${esc(f.answer_en||'')}</td><td>${esc(f.answer_de||'')}</td><td><button class="btn btn-ghost btn-sm" onclick="delFaq(${f.id})">Remove</button></td></tr>`).join('');
+ return `<h1>Assistant knowledge</h1><div class="muted">The website chat assistant answers ONLY from your live apartment data plus the custom answers below. Anything it cannot answer is sent to your WhatsApp (${WA_SHOW}).</div>
+  <div class="panel"><strong>Answered automatically from live data:</strong><div class="muted" style="margin-top:6px;font-size:13px">Prices · Availability · Guest capacity &amp; group combinations · Locations · Minimum nights · Cancellation policy · How to book</div></div>
+  <div class="panel"><div style="display:flex;justify-content:space-between;align-items:center"><strong>Your custom answers (${FAQS.length})</strong><button class="btn btn-sm" onclick="addFaq()">+ Add answer</button></div>
+  <div style="overflow-x:auto"><table class="tbl" style="margin-top:8px"><thead><tr><th>Keywords (triggers)</th><th>Answer (English)</th><th>Answer (German)</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan=4 class="muted">No custom answers yet. Built-in answers already cover check-in, Wi-Fi, parking, pets, smoking, kitchen and luggage.</td></tr>'}</tbody></table></div></div>`;
+}
+async function addFaq(){const kw=prompt('Keywords that trigger this answer (space-separated, e.g. "breakfast morning food"):');if(!kw)return;const en=prompt('Answer in English:');if(!en)return;const de=prompt('Answer in German (leave blank to reuse the English text):')||en;await sbInsert('faqs',{keywords:kw,answer_en:en,answer_de:de});await reloadFaqs();render()}
+async function delFaq(id){await sbDelete('faqs','id',id);await reloadFaqs();render()}
+
+/* ===== SITE ASSISTANT (answers only from your data + FAQs) ===== */
+const WA_PHONE='436643912693';
+const WA_LINK='https://wa.me/'+WA_PHONE;
+const WA_SHOW='+43 664 3912693';
+let FAQS=[];
+const DEFAULT_FAQS=[
+ {q:'check in checkin check-out checkout time hour anreise abreise einchecken uhrzeit צ׳ק אין כניסה יציאה שעה',a_en:'Check-in is from 3:00 PM, check-out by 11:00 AM. Early check-in or late check-out may be possible on request.',a_de:'Check-in ab 15:00 Uhr, Check-out bis 11:00 Uhr. Früher Check-in oder später Check-out auf Anfrage möglich.'},
+ {q:'wifi wi-fi internet wlan אינטרנט וויפי',a_en:'Yes — every apartment has fast, free Wi-Fi.',a_de:'Ja — jedes Apartment hat schnelles, kostenloses WLAN.'},
+ {q:'parking car park auto parken garage חניה רכב',a_en:'Public paid parking is available nearby; there is no private parking at the apartments.',a_de:'In der Nähe gibt es öffentliche, kostenpflichtige Parkplätze; eigene Parkplätze gibt es nicht.'},
+ {q:'pet pets dog cat animal haustier hund katze חיה כלב חתול',a_en:'Sorry, pets are not allowed in the apartments.',a_de:'Haustiere sind in den Apartments leider nicht erlaubt.'},
+ {q:'smoke smoking rauchen zigarette עישון סיגריה',a_en:'All apartments are strictly non-smoking.',a_de:'Alle Apartments sind reine Nichtraucher-Apartments.'},
+ {q:'kitchen cook kitchenette küche kochen מטבח בישול',a_en:'Yes — each apartment has a fully equipped kitchenette.',a_de:'Ja — jedes Apartment hat eine voll ausgestattete Küchenzeile.'},
+ {q:'luggage bags store gepäck aufbewahren מזוודות אחסון',a_en:'We can usually store luggage before check-in or after check-out — just ask us.',a_de:'Gepäck kann meist vor dem Check-in oder nach dem Check-out aufbewahrt werden — fragen Sie uns einfach.'}
+];
+async function reloadFaqs(){const f=await sbGet('faqs?select=*&order=id');FAQS=f.map(x=>({q:((x.keywords||'')+' '+(x.answer_en||'')).toLowerCase(),a_en:x.answer_en,a_de:x.answer_de||x.answer_en,id:x.id,keywords:x.keywords,answer_en:x.answer_en,answer_de:x.answer_de}))}
+function matchFaq(t){const all=FAQS.concat(DEFAULT_FAQS);const words=t.split(/[^a-z0-9äöüßא-ת]+/i).filter(w=>w.length>2);let best=null,bs=0;for(const f of all){const kw=(f.q||'').toLowerCase();let s=0;for(const w of words){if(kw.indexOf(w)>=0)s++}if(s>bs){bs=s;best=f}}return bs>=1?best:null}
+function assistantAnswer(qraw){
+ const t=qraw.toLowerCase();
+ if(/^(hi|hey|hello|hallo|servus|good|שלום|היי|הי)\b/.test(t))return L("Hi! 👋 I can help with our Vienna apartments — prices, availability, group stays and booking. What would you like to know?","Hallo! 👋 Ich helfe mit unseren Wiener Apartments — Preise, Verfügbarkeit, Gruppen und Buchung. Was möchten Sie wissen?");
+ if(/(price|prices|cost|how much|rate|expensive|preis|kostet|teuer|מחיר|מחירים|כמה עולה|כמה זה)/.test(t)){const list=UNITS.map(u=>`• ${esc(u.name)}: ${CUR}${u.basePricePerNight} ${L('per night','pro Nacht')} (${L('up to','bis')} ${u.maxGuests} ${L('guests','Gäste')})`).join('<br>');return L('Here are our nightly prices:<br>'+list+'<br><br>Prices can vary by season — the exact total appears when you choose dates.','Unsere Preise pro Nacht:<br>'+list+'<br><br>Preise können saisonal variieren — der genaue Gesamtpreis erscheint bei der Datumsauswahl.')}
+ if(/(people|persons|guests|sleep|fit|group|families|kids|children|אנשים|קבוצה|כמה אנשים|ילדים|personen|gäste|gruppe|leute|kinder)/.test(t)){const mx=Math.max.apply(null,UNITS.map(u=>u.maxGuests));const tot=UNITS.reduce((s,u)=>s+u.maxGuests,0);return L(`A single apartment sleeps up to ${mx} guests. For larger groups we automatically combine apartments into one booking (together up to ${tot} guests) — just enter the number of guests when you search.`,`Ein Apartment beherbergt bis zu ${mx} Gäste. Für größere Gruppen kombinieren wir Apartments automatisch zu einer Buchung (zusammen bis zu ${tot} Gäste) — geben Sie einfach die Gästezahl bei der Suche ein.`)}
+ if(/(availa|free|vacan|open date|verfügbar|frei|belegt|פנוי|זמין|תאריכים|פנויים)/.test(t))return L("To check availability, enter your check-in / check-out dates and number of guests in the search box at the top and press Search — you'll see exactly what's free.","Für die Verfügbarkeit geben Sie oben Anreise/Abreise und Gästezahl ein und klicken auf Suchen — Sie sehen sofort, was frei ist.");
+ if(/(where|location|address|located|area|district|neighbou|wo |adresse|lage|bezirk|gegend|איפה|מיקום|כתובת|אזור)/.test(t)){const list=UNITS.map(u=>`• ${esc(u.name)}: ${esc(u.address)}`).join('<br>');return L('Our apartments are around central Vienna:<br>'+list,'Unsere Apartments liegen im Zentrum von Wien:<br>'+list)}
+ if(/(cancel|refund|storn|rückerstatt|geld zurück|ביטול|החזר|לבטל)/.test(t))return L('Bookings can be cancelled, but they are non-refundable — the amount paid is not returned, so please choose your dates carefully.','Buchungen können storniert werden, sind jedoch nicht erstattungsfähig — der gezahlte Betrag wird nicht zurückerstattet. Bitte wählen Sie Ihre Daten sorgfältig.');
+ if(/(minimum|min night|how many night|nights|mindest|nächte|übernacht|מינימום|לילות|כמה לילות)/.test(t))return L('The minimum stay is 2 nights.','Der Mindestaufenthalt beträgt 2 Nächte.');
+ if(/(pay|payment|deposit|card|credit|zahl|bezahl|kreditkarte|anzahlung|תשלום|לשלם|כרטיס|מקדמה)/.test(t))return L('Payment is made in full at booking, by card. Your booking is confirmed the moment payment succeeds.','Die Zahlung erfolgt vollständig bei der Buchung per Karte. Ihre Buchung wird bestätigt, sobald die Zahlung erfolgreich ist.');
+ if(/(book|booking|reserve|reservation|how do i|order|buchen|reservier|bestell|להזמין|איך מזמינים|הזמנה|לבצע)/.test(t))return L('Booking is easy: pick your dates and guests above, choose an apartment, and pay securely. You get an instant confirmation with a reference number.','Buchen ist einfach: oben Daten und Gäste wählen, Apartment auswählen und sicher bezahlen. Sie erhalten sofort eine Bestätigung mit Buchungsnummer.');
+ const f=matchFaq(t);
+ if(f)return L(f.a_en,f.a_de);
+ return L(`I'm not sure about that one 🤔 For anything else, message us on WhatsApp: <a href="${WA_LINK}" target="_blank">${WA_SHOW}</a>`,`Das weiß ich leider nicht genau 🤔 Für alles Weitere schreiben Sie uns auf WhatsApp: <a href="${WA_LINK}" target="_blank">${WA_SHOW}</a>`);
+}
+function chatWidget(){
+ if(!state.chatOpen)return `<div class="chat-fab" onclick="toggleChat()" title="${L('Chat with us','Chatten Sie mit uns')}">💬</div>`;
+ const msgs=state.chatMsgs.map(m=>`<div class="cmsg ${m.role}">${m.role==='user'?esc(m.text):m.text}</div>`).join('');
+ const sugg=state.chatMsgs.length<=1?`<div class="chat-sugg">${[[L('Prices?','Preise?')],[L('Room for 8 people?','Platz für 8?')],[L('Where are you located?','Wo liegt ihr?')],[L('How do I book?','Wie buche ich?')]].map(s=>`<button onclick="chatAsk(this.textContent)">${s[0]}</button>`).join('')}</div>`:'';
+ return `<div class="chat-fab" onclick="toggleChat()">✕</div>
+ <div class="chat-panel">
+  <div class="chat-head"><span><strong>${L('Vienna Stay Assistant','Vienna Stay Assistent')}</strong><br><span style="font-size:11px;opacity:.85;font-family:-apple-system,sans-serif">${L('Usually replies instantly','Antwortet meist sofort')}</span></span><span onclick="toggleChat()" style="cursor:pointer;font-size:18px">✕</span></div>
+  <div class="chat-body" id="chatBody">${msgs}${sugg}</div>
+  <div class="chat-input"><input id="chatInp" placeholder="${L('Ask a question…','Frage stellen…')}" onkeydown="if(event.key==='Enter')sendChat()"><button onclick="sendChat()">➤</button></div>
+ </div>`;
+}
+function toggleChat(){state.chatOpen=!state.chatOpen;if(state.chatOpen&&state.chatMsgs.length===0)state.chatMsgs.push({role:'bot',text:L("Hi! 👋 I'm the Vienna Stay assistant. Ask me about prices, availability, group stays, booking, or anything about the apartments.","Hallo! 👋 Ich bin der Vienna-Stay-Assistent. Fragen Sie mich zu Preisen, Verfügbarkeit, Gruppen, Buchung oder den Apartments.")});render();scrollChat()}
+function chatAsk(q){state.chatMsgs.push({role:'user',text:q});state.chatMsgs.push({role:'bot',text:assistantAnswer(q)});render();scrollChat()}
+function sendChat(){const el=document.getElementById('chatInp');const q=(el&&el.value||'').trim();if(!q)return;state.chatMsgs.push({role:'user',text:q});state.chatMsgs.push({role:'bot',text:assistantAnswer(q)});render();scrollChat()}
+function scrollChat(){setTimeout(function(){const b=document.getElementById('chatBody');if(b)b.scrollTop=b.scrollHeight;const i=document.getElementById('chatInp');if(i)i.focus()},30)}
 
 /* TIMER */
 function startTimer(){tick=setInterval(()=>{const s=remainSecs(),el=document.getElementById('tmr');if(s<=0){render();return}if(el){el.textContent='⏳ '+L('Held for','Reserviert für')+' '+mmss(s);el.className='timer'+(s<120?' warn':'')}},1000)}
