@@ -99,6 +99,12 @@ h1,h2,h3,.serif{font-family:Georgia,"Times New Roman",serif;letter-spacing:.2px}
 .inline-error{color:var(--danger);font-size:13px;margin-top:6px}.inline-ok{color:var(--ok);font-size:13px;margin-top:6px}
 .park-opt{display:flex;align-items:center;gap:9px;cursor:pointer;font-size:14px;color:var(--ink);background:var(--cream);border:1px solid var(--beige-line);border-radius:9px;padding:10px 12px}
 .park-opt input{width:17px;height:17px;cursor:pointer}
+textarea.ctrl{width:100%;padding:11px 12px;border:1px solid var(--beige-line);border-radius:9px;font-size:14px;background:var(--cream);color:var(--ink);font-family:inherit;resize:vertical}
+.email-edit{display:grid;grid-template-columns:1.1fr .9fr;gap:16px;margin-top:14px}
+.email-prev{border:1px solid var(--beige-line);border-radius:10px;padding:14px;margin-top:8px;background:#fff}
+.email-subj{font-weight:700;margin-bottom:8px;font-family:Georgia,serif}
+.email-body{white-space:pre-wrap;font-size:14px;line-height:1.5}
+@media(max-width:900px){.email-edit{grid-template-columns:1fr}}
 .badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600}
 .badge.confirmed{background:#e2efe3;color:var(--ok)}.badge.cancelled{background:#f3d9cf;color:var(--danger-dark)}
 .badge.soft_locked{background:#efe7d6;color:#8a6d1f}
@@ -242,9 +248,12 @@ function activeExtras(){return EXTRAS.filter(function(e){return e.active!==false
 function extraLabel(e){return L(e.name_en,e.name_de||e.name_en)}
 function selExtras(n){return activeExtras().filter(function(e){return state.extras[e.id]}).map(function(e){return {id:e.id,name_en:e.name_en,name_de:e.name_de,per:e.per,price:Number(e.price),amount:(e.per==='night'?Number(e.price)*n:Number(e.price))}})}
 function extrasSum(n){return selExtras(n).reduce(function(s,e){return s+e.amount},0)}
-async function loadAll(){await Promise.all([reloadUnits(),reloadSeasons(),reloadCodes(),reloadBookings(),reloadFaqs(),reloadExtras()]);render()}
+let EMAILS=[];
+async function reloadEmails(){const e=await sbGet('email_templates?select=*&order=sort,id');EMAILS=e||[]}
+function fillTemplate(txt,b){if(!txt)return '';const u=b?unitsLabel(b):'';return String(txt).replace(/\{guest\}/g,(b&&b.guestName)||'').replace(/\{apartment\}/g,u).replace(/\{checkin\}/g,b?fmt(b.checkIn):'').replace(/\{checkout\}/g,b?fmt(b.checkOut):'').replace(/\{nights\}/g,b?b.nights:'').replace(/\{guests\}/g,b?b.guests:'').replace(/\{reference\}/g,(b&&b.ref)||'').replace(/\{total\}/g,b?CUR+b.total:'')}
+async function loadAll(){await Promise.all([reloadUnits(),reloadSeasons(),reloadCodes(),reloadBookings(),reloadFaqs(),reloadExtras(),reloadEmails()]);render()}
 
-const state={screen:'home',checkIn:iso(14),checkOut:iso(17),guests:2,selectedUnitIds:null,bookingId:null,guest:{name:'',email:'',phone:''},promo:'',discount:null,promoError:'',cancelId:null,mb:{email:'',ref:'',searched:false,results:[]},adminTab:'dashboard',adminFilter:'all',adminSearch:'',auser:'',apass:'',adminErr:'',pickerOpen:null,pickerMonth:null,chatOpen:false,chatMsgs:[],extras:{},lang:(function(){try{return localStorage.getItem('vs-lang')||'en'}catch(e){return 'en'}})()};
+const state={screen:'home',checkIn:iso(14),checkOut:iso(17),guests:2,selectedUnitIds:null,bookingId:null,guest:{name:'',email:'',phone:''},promo:'',discount:null,promoError:'',cancelId:null,mb:{email:'',ref:'',searched:false,results:[]},adminTab:'dashboard',adminFilter:'all',adminSearch:'',auser:'',apass:'',adminErr:'',pickerOpen:null,pickerMonth:null,chatOpen:false,chatMsgs:[],extras:{},emailEdit:null,emailDraft:null,lang:(function(){try{return localStorage.getItem('vs-lang')||'en'}catch(e){return 'en'}})()};
 let adminAuthed=false;
 const ADMIN_USER='manager',ADMIN_PASS='vienna2026';
 const L=(en,de)=>state.lang==='de'?de:en;
@@ -481,6 +490,7 @@ function adminLayout(){
  else if(state.adminTab==='invoices')main=admInvoices();
  else if(state.adminTab==='assistant')main=admFaqs();
  else if(state.adminTab==='extras')main=admExtras();
+ else if(state.adminTab==='emails')main=admEmails();
  return `<div class="admin-top"><div class="brand">☁ my Vienna Stay · Cockpit</div><div><a onclick="go('home')">↗ View booking site</a><a onclick="adminLogout()">Log out</a></div></div>
  <div class="admin-layout">
   <nav class="admin-side">
@@ -492,6 +502,7 @@ function adminLayout(){
    <a class="${A('apartments')}" onclick="adminGo('apartments')">⌂ Apartments</a>
    <a class="${A('prices')}" onclick="adminGo('prices')">€ Prices & discounts</a>
    <a class="${A('extras')}" onclick="adminGo('extras')">➕ Extras</a>
+   <a class="${A('emails')}" onclick="adminGo('emails')">📧 Emails</a>
    <a class="${A('guests')}" onclick="adminGo('guests')">👤 Guests</a>
    <a class="${A('tasks')}" onclick="adminGo('tasks')">✓ Tasks</a>
    <a class="${A('invoices')}" onclick="adminGo('invoices')">▧ Invoices</a>
@@ -678,6 +689,32 @@ function admExtras(){
 async function addExtra(){const en=prompt('Extra name (English), e.g. "Airport transfer":');if(!en)return;const de=prompt('Extra name (German — leave blank to reuse English):')||en;const price=parseFloat(prompt('Price (number only):','10'))||0;const per=(prompt('Charge per "night" or per "stay"?','night')||'night').toLowerCase().indexOf('stay')>=0?'stay':'night';await sbInsert('extras',{name_en:en,name_de:de,price:price,per:per,active:true,sort:EXTRAS.length+1});await reloadExtras();render()}
 async function toggleExtra(id){const e=EXTRAS.find(x=>x.id===id);const na=e.active===false?true:false;await sbPatch('extras','id',id,{active:na});await reloadExtras();render()}
 async function delExtra(id){await sbDelete('extras','id',id);await reloadExtras();render()}
+
+function emailTitle(k){return ({confirmation:L('Booking confirmation','Buchungsbestätigung'),prearrival:L('Before arrival (check-in info)','Vor Anreise (Check-in-Infos)'),poststay:L('After the stay (thank you)','Nach dem Aufenthalt (Danke)')})[k]||k}
+function emailTiming(t){if(t.key==='confirmation')return L('Sent immediately when a booking is paid','Sofort bei bezahlter Buchung');if(t.key==='prearrival')return (Math.abs(t.offset_days||2))+' '+L('day(s) before check-in','Tag(e) vor Anreise');return (t.offset_days||1)+' '+L('day(s) after check-out','Tag(e) nach Abreise')}
+function sampleBooking(){const conf=bookings.filter(b=>b.status==='confirmed');return conf[0]||{guestName:'Anna Weber',ref:'VS-DEMO1',checkIn:iso(14),checkOut:iso(17),nights:3,guests:2,total:390,unitIds:UNITS.length?[UNITS[0].id]:[]}}
+function admEmails(){
+ if(state.emailEdit){const t=state.emailDraft,sb=sampleBooking();
+  return `<h1>${emailTitle(t.key)}</h1><a class="muted" style="cursor:pointer" onclick="cancelEmail()">← ${L('Back to emails','Zurück')}</a>
+   <div class="email-edit">
+    <div class="panel"><label class="lbl">${L('Subject (English)','Betreff (Englisch)')}</label><input class="ctrl" value="${esc(t.subject_en||'')}" onchange="state.emailDraft.subject_en=this.value">
+     <label class="lbl" style="margin-top:12px">${L('Body (English)','Text (Englisch)')}</label><textarea class="ctrl" rows="7" onchange="state.emailDraft.body_en=this.value">${esc(t.body_en||'')}</textarea>
+     <div class="divider"></div>
+     <label class="lbl">${L('Subject (German)','Betreff (Deutsch)')}</label><input class="ctrl" value="${esc(t.subject_de||'')}" onchange="state.emailDraft.subject_de=this.value">
+     <label class="lbl" style="margin-top:12px">${L('Body (German)','Text (Deutsch)')}</label><textarea class="ctrl" rows="7" onchange="state.emailDraft.body_de=this.value">${esc(t.body_de||'')}</textarea>
+     <div class="muted" style="font-size:12px;margin-top:10px">${L('Placeholders you can use','Platzhalter')}: {guest} {apartment} {checkin} {checkout} {nights} {guests} {reference} {total}</div>
+     <div style="margin-top:14px;display:flex;gap:10px"><button class="btn" onclick="saveEmail()">${L('Save','Speichern')}</button><button class="btn btn-ghost" onclick="cancelEmail()">${L('Cancel','Abbrechen')}</button></div>
+    </div>
+    <div class="panel"><strong>${L('Live preview','Live-Vorschau')} (EN)</strong><div class="email-prev"><div class="email-subj">${esc(fillTemplate(t.subject_en,sb))}</div><div class="email-body">${esc(fillTemplate(t.body_en,sb))}</div></div><div class="muted" style="font-size:12px;margin-top:8px">${L('Using a sample booking to show how it looks.','Beispielbuchung zur Veranschaulichung.')}</div></div>
+   </div>`;
+ }
+ const rows=EMAILS.map(t=>`<div class="card pad" style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><div><strong>${emailTitle(t.key)}</strong><div class="muted" style="font-size:13px">${esc(t.subject_en||'')}</div><div class="muted" style="font-size:12px">⏱ ${emailTiming(t)}</div></div><div style="display:flex;gap:8px;align-items:center"><span class="badge ${t.enabled===false?'cancelled':'confirmed'}">${t.enabled===false?L('Off','Aus'):L('On','An')}</span><button class="btn btn-ghost btn-sm" onclick="toggleEmail('${t.key}')">${t.enabled===false?L('Enable','An'):L('Disable','Aus')}</button><button class="btn btn-sm" onclick="editEmail('${t.key}')">${L('Edit','Bearbeiten')}</button></div></div></div>`).join('');
+ return `<h1>Emails</h1><div class="muted">Automatic emails to your guests. Edit the text in English &amp; German; sending is powered by Resend (setup below).</div>${EMAILS.length?rows:'<div class="panel muted" style="margin-top:12px">No templates yet — run the setup SQL to add the three emails.</div>'}`;
+}
+function editEmail(k){state.emailEdit=k;state.emailDraft=Object.assign({},EMAILS.find(t=>t.key===k));window.scrollTo(0,0);render()}
+function cancelEmail(){state.emailEdit=null;state.emailDraft=null;render()}
+async function saveEmail(){const d=state.emailDraft;await sbPatch('email_templates','key',d.key,{subject_en:d.subject_en,subject_de:d.subject_de,body_en:d.body_en,body_de:d.body_de});await reloadEmails();state.emailEdit=null;state.emailDraft=null;render()}
+async function toggleEmail(k){const t=EMAILS.find(x=>x.key===k);const na=t.enabled===false?true:false;await sbPatch('email_templates','key',k,{enabled:na});await reloadEmails();render()}
 
 /* ===== SITE ASSISTANT (answers only from your data + FAQs) ===== */
 const WA_PHONE='436643912693';
