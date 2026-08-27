@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Vienna Stay Apartments</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
 <style>
 :root{
   --brand:#8a7d6b;--brand-dark:#6d6153;--brand-darker:#554c41;
@@ -55,6 +56,8 @@ h1,h2,h3,.serif{font-family:Georgia,"Times New Roman",serif;letter-spacing:.2px}
 .btn-danger{background:var(--danger)}.btn-danger:hover{background:var(--danger-dark)}
 .btn-block{width:100%}
 .card{background:#fff;border:1px solid var(--beige-line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+.locmap{height:440px;max-height:70vh;border-radius:12px;border:1px solid var(--beige-line);overflow:hidden;z-index:0}
+.leaflet-popup-content{font-family:-apple-system,sans-serif;font-size:13px}
 .hero{background:linear-gradient(rgba(85,76,65,.55),rgba(85,76,65,.55)),url('https://images.unsplash.com/photo-1467269204594-9661b134dd2b?auto=format&fit=crop&w=1600&q=70');background-size:cover;background-position:center;color:#fff;padding:72px 0 84px}
 .hero h1{font-size:44px;margin:0 0 10px}.hero p{font-size:18px;opacity:.95;margin:0}
 .searchbox{background:#fff;color:var(--ink);border-radius:14px;box-shadow:var(--shadow);padding:18px;margin-top:28px;display:grid;grid-template-columns:1fr 1fr .7fr auto;gap:14px;align-items:end}
@@ -169,6 +172,7 @@ label.lbl{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;text
 </head>
 <body>
 <div id="root"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 <script>
 const CUR='€';
 const PARK_PRICE=15;
@@ -234,7 +238,7 @@ function sbInsert(t,row){return fetch(SB_URL+'/'+t,{method:'POST',headers:Object
 function sbPatch(t,col,val,patch){return fetch(SB_URL+'/'+t+'?'+col+'=eq.'+encodeURIComponent(val),{method:'PATCH',headers:Object.assign({},SB_H,{Prefer:'return=minimal'}),body:JSON.stringify(patch)}).catch(function(){})}
 function sbDelete(t,col,val){return fetch(SB_URL+'/'+t+'?'+col+'=eq.'+encodeURIComponent(val),{method:'DELETE',headers:SB_H}).catch(function(){})}
 function sendMail(id,type){return fetch(SB_URL+'/rpc/send_booking_email',{method:'POST',headers:Object.assign({},SB_H,{'Content-Type':'application/json'}),body:JSON.stringify({p_id:id,p_type:type})}).catch(function(){})}
-const uFromDb=u=>({id:u.id,name:u.name,description:u.description,maxGuests:u.max_guests,basePricePerNight:Number(u.base_price_per_night),address:u.address,photo:u.photo,active:u.active});
+const uFromDb=u=>({id:u.id,name:u.name,description:u.description,maxGuests:u.max_guests,basePricePerNight:Number(u.base_price_per_night),address:u.address,photo:u.photo,active:u.active,lat:(u.lat!=null?Number(u.lat):null),lng:(u.lng!=null?Number(u.lng):null)});
 const sFromDb=r=>({id:r.id,unitId:r.unit_id,from:r.from_date,to:r.to_date,price:Number(r.price)});
 const cFromDb=c=>({code:c.code,type:c.type,value:Number(c.value),from:c.from_date,to:c.to_date,minNights:c.min_nights,active:c.active});
 const bFromDb=b=>({id:b.id,ref:b.ref,status:b.status,unitIds:b.unit_ids||[],checkIn:b.check_in,checkOut:b.check_out,nights:b.nights,guests:b.guests,subtotal:Number(b.subtotal),discountCode:b.discount_code,discountAmount:Number(b.discount_amount||0),total:Number(b.total),guestName:b.guest_name,guestEmail:b.guest_email,guestPhone:b.guest_phone,source:b.source,lockExpiresAt:b.lock_expires_at,createdAt:b.created_at,paidAt:b.paid_at,cancelledAt:b.cancelled_at,extrasSel:b.extras||[],extrasTotal:Number(b.extras_total||0)});
@@ -299,6 +303,7 @@ function render(){
  else if(state.screen==='adminlogin')b=adminLoginS();
  root.innerHTML=header()+'<main>'+b+'</main>'+footer()+chatWidget();
  if(state.screen==='booking'||state.screen==='payment')startTimer();
+ if(state.screen==='home')setTimeout(initMap,0);
 }
 
 /* HOME */
@@ -319,7 +324,8 @@ function homeS(){
    <div class="card pad"><h3>${L('Central locations','Zentrale Lage')}</h3><p class="muted">${L("Every apartment is a short walk from Vienna's landmarks and cafés.",'Jedes Apartment liegt nur wenige Schritte von Wiens Sehenswürdigkeiten und Cafés entfernt.')}</p></div>
    <div class="card pad"><h3>${L('Groups welcome','Gruppen willkommen')}</h3><p class="muted">${L('No cap on guests. For larger parties we bundle apartments together automatically.','Keine Begrenzung der Gästezahl. Für größere Gruppen fassen wir Apartments automatisch zusammen.')}</p></div>
    <div class="card pad"><h3>${L('Simple booking','Einfache Buchung')}</h3><p class="muted">${L("Pick dates and guests, pay once, and you're set — confirmation in seconds.",'Daten und Gäste wählen, einmal bezahlen, fertig – Bestätigung in Sekunden.')}</p></div>
-  </div></section>`
+  </div></section>
+  <section class="section container"><h2>${L('Where our apartments are','Wo unsere Apartments liegen')}</h2><p class="sub">${L('Our apartments across central Vienna — click a pin for details.','Unsere Apartments im Zentrum von Wien — für Details auf eine Markierung klicken.')}</p><div id="locmap" class="locmap"></div></section>`
 }
 function refreshNights(){const n=nights(state.checkIn,state.checkOut),el=document.getElementById('nightsInfo'),btn=document.querySelector('.searchbox .btn');if(btn)btn.disabled=n<2;if(el)el.innerHTML=(n>=2?`<div class="nights-pill">${n} ${L('nights','Nächte')}</div>`:'')+(n>0&&n<2?`<div class="helper">${L('Minimum stay: 2 nights.','Mindestaufenthalt: 2 Nächte.')}</div>`:'')}
 async function doSearch(){if(nights(state.checkIn,state.checkOut)<2)return;await reloadBookings();go('results')}
@@ -787,6 +793,19 @@ function pushBot(q){const ans=assistantAnswer(q);state.chatMsgs.push({role:'bot'
 function chatAsk(q){state.chatMsgs.push({role:'user',text:q});render();scrollChat();pushBot(q)}
 function sendChat(){const el=document.getElementById('chatInp');const q=(el&&el.value||'').trim();if(!q)return;state.chatMsgs.push({role:'user',text:q});render();scrollChat();pushBot(q)}
 function scrollChat(){setTimeout(function(){const b=document.getElementById('chatBody');if(b)b.scrollTop=b.scrollHeight;const i=document.getElementById('chatInp');if(i)i.focus()},30)}
+function initMap(){try{
+ const el=document.getElementById('locmap');if(!el)return;
+ if(!window.L){el.innerHTML='<div class="muted" style="padding:20px">'+L('Map loading…','Karte lädt…')+'</div>';return}
+ if(el._init)return;el._init=true;
+ const M=window.L;
+ const COORDS={u1:[48.2140,16.3590],u2:[48.1910,16.3810],u3:[48.1985,16.3630],u4:[48.1850,16.3200]};
+ const pts=UNITS.map(function(u){var la=u.lat,ln=u.lng;if((!la||!ln)&&COORDS[u.id]){la=COORDS[u.id][0];ln=COORDS[u.id][1]}return{u:u,la:la,ln:ln}}).filter(function(p){return p.la&&p.ln});
+ const map=M.map('locmap',{scrollWheelZoom:false}).setView([48.2082,16.3738],12);
+ M.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:19}).addTo(map);
+ const bounds=[];
+ pts.forEach(function(p){M.marker([p.la,p.ln]).addTo(map).bindPopup('<b>'+esc(p.u.name)+'</b><br>'+esc(p.u.address||''));bounds.push([p.la,p.ln])});
+ if(bounds.length){map.fitBounds(bounds,{padding:[40,40],maxZoom:14})}
+}catch(e){}}
 
 /* TIMER */
 function startTimer(){tick=setInterval(()=>{const s=remainSecs(),el=document.getElementById('tmr');if(s<=0){render();return}if(el){el.textContent='⏳ '+L('Held for','Reserviert für')+' '+mmss(s);el.className='timer'+(s<120?' warn':'')}},1000)}
