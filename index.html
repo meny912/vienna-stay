@@ -230,15 +230,21 @@ function sbDelete(t,col,val){return fetch(SB_URL+'/'+t+'?'+col+'=eq.'+encodeURIC
 const uFromDb=u=>({id:u.id,name:u.name,description:u.description,maxGuests:u.max_guests,basePricePerNight:Number(u.base_price_per_night),address:u.address,photo:u.photo,active:u.active});
 const sFromDb=r=>({id:r.id,unitId:r.unit_id,from:r.from_date,to:r.to_date,price:Number(r.price)});
 const cFromDb=c=>({code:c.code,type:c.type,value:Number(c.value),from:c.from_date,to:c.to_date,minNights:c.min_nights,active:c.active});
-const bFromDb=b=>({id:b.id,ref:b.ref,status:b.status,unitIds:b.unit_ids||[],checkIn:b.check_in,checkOut:b.check_out,nights:b.nights,guests:b.guests,subtotal:Number(b.subtotal),discountCode:b.discount_code,discountAmount:Number(b.discount_amount||0),total:Number(b.total),guestName:b.guest_name,guestEmail:b.guest_email,guestPhone:b.guest_phone,source:b.source,lockExpiresAt:b.lock_expires_at,createdAt:b.created_at,paidAt:b.paid_at,cancelledAt:b.cancelled_at});
+const bFromDb=b=>({id:b.id,ref:b.ref,status:b.status,unitIds:b.unit_ids||[],checkIn:b.check_in,checkOut:b.check_out,nights:b.nights,guests:b.guests,subtotal:Number(b.subtotal),discountCode:b.discount_code,discountAmount:Number(b.discount_amount||0),total:Number(b.total),guestName:b.guest_name,guestEmail:b.guest_email,guestPhone:b.guest_phone,source:b.source,lockExpiresAt:b.lock_expires_at,createdAt:b.created_at,paidAt:b.paid_at,cancelledAt:b.cancelled_at,extrasSel:b.extras||[],extrasTotal:Number(b.extras_total||0)});
 const bToDb=b=>({id:b.id,ref:b.ref,status:b.status,unit_ids:b.unitIds,check_in:b.checkIn,check_out:b.checkOut,nights:b.nights,guests:b.guests,subtotal:b.subtotal,discount_code:b.discountCode||null,discount_amount:b.discountAmount||0,total:b.total,guest_name:b.guestName||null,guest_email:b.guestEmail||null,guest_phone:b.guestPhone||null,source:b.source||'DIRECT',lock_expires_at:b.lockExpiresAt});
 async function reloadUnits(){const u=await sbGet('units?select=*&order=id');if(u.length){UNITS.length=0;u.map(uFromDb).forEach(x=>UNITS.push(x))}}
 async function reloadSeasons(){const s=await sbGet('seasonal_rates?select=*&order=id');SEASONAL.length=0;s.map(sFromDb).forEach(x=>SEASONAL.push(x))}
 async function reloadCodes(){const c=await sbGet('discount_codes?select=*&order=code');if(c.length){CODES.length=0;c.map(cFromDb).forEach(x=>CODES.push(x))}}
 async function reloadBookings(){const b=await sbGet('bookings?select=*');bookings.length=0;b.map(bFromDb).forEach(x=>bookings.push(x))}
-async function loadAll(){await Promise.all([reloadUnits(),reloadSeasons(),reloadCodes(),reloadBookings(),reloadFaqs()]);render()}
+let EXTRAS=[];
+async function reloadExtras(){const e=await sbGet('extras?select=*&order=sort,id');EXTRAS=e||[]}
+function activeExtras(){return EXTRAS.filter(function(e){return e.active!==false})}
+function extraLabel(e){return L(e.name_en,e.name_de||e.name_en)}
+function selExtras(n){return activeExtras().filter(function(e){return state.extras[e.id]}).map(function(e){return {id:e.id,name_en:e.name_en,name_de:e.name_de,per:e.per,price:Number(e.price),amount:(e.per==='night'?Number(e.price)*n:Number(e.price))}})}
+function extrasSum(n){return selExtras(n).reduce(function(s,e){return s+e.amount},0)}
+async function loadAll(){await Promise.all([reloadUnits(),reloadSeasons(),reloadCodes(),reloadBookings(),reloadFaqs(),reloadExtras()]);render()}
 
-const state={screen:'home',checkIn:iso(14),checkOut:iso(17),guests:2,selectedUnitIds:null,bookingId:null,guest:{name:'',email:'',phone:''},promo:'',discount:null,promoError:'',cancelId:null,mb:{email:'',ref:'',searched:false,results:[]},adminTab:'dashboard',adminFilter:'all',adminSearch:'',auser:'',apass:'',adminErr:'',pickerOpen:null,pickerMonth:null,chatOpen:false,chatMsgs:[],parking:false,lang:(function(){try{return localStorage.getItem('vs-lang')||'en'}catch(e){return 'en'}})()};
+const state={screen:'home',checkIn:iso(14),checkOut:iso(17),guests:2,selectedUnitIds:null,bookingId:null,guest:{name:'',email:'',phone:''},promo:'',discount:null,promoError:'',cancelId:null,mb:{email:'',ref:'',searched:false,results:[]},adminTab:'dashboard',adminFilter:'all',adminSearch:'',auser:'',apass:'',adminErr:'',pickerOpen:null,pickerMonth:null,chatOpen:false,chatMsgs:[],extras:{},lang:(function(){try{return localStorage.getItem('vs-lang')||'en'}catch(e){return 'en'}})()};
 let adminAuthed=false;
 const ADMIN_USER='manager',ADMIN_PASS='vienna2026';
 const L=(en,de)=>state.lang==='de'?de:en;
@@ -350,7 +356,7 @@ function startBooking(){
  const n=nights(state.checkIn,state.checkOut),sub=comboPrice(ids,state.checkIn,state.checkOut),now=new Date();
  const b={id:'b'+now.getTime(),ref:makeRef(),status:'soft_locked',lockExpiresAt:new Date(now.getTime()+600000).toISOString(),createdAt:now.toISOString(),unitIds:ids,checkIn:state.checkIn,checkOut:state.checkOut,nights:n,guests:state.guests,subtotal:sub,total:sub,discountAmount:0,discountCode:null};
  bookings.push(b);sbInsert('bookings',bToDb(b));
- state.bookingId=b.id;state.guest={name:'',email:'',phone:''};state.promo='';state.discount=null;state.promoError='';state.parking=false;
+ state.bookingId=b.id;state.guest={name:'',email:'',phone:''};state.promo='';state.discount=null;state.promoError='';state.extras={};
  go('booking');
 }
 
@@ -358,7 +364,7 @@ function startBooking(){
 function currentB(){return bookings.find(b=>b.id===state.bookingId)}
 function remainSecs(){const b=currentB();return b?Math.round((new Date(b.lockExpiresAt)-new Date())/1000):0}
 function bookingS(){
- const b=currentB(),n=b.nights,sub=b.subtotal,expired=remainSecs()<=0,parkTot=state.parking?PARK_PRICE*n:0,total=sub-(state.discount?state.discount.amount:0)+parkTot;
+ const b=currentB(),n=b.nights,sub=b.subtotal,expired=remainSecs()<=0,exTot=extrasSum(n),total=sub-(state.discount?state.discount.amount:0)+exTot;
  const label=unitsLabel(b);
  if(expired)return `<section class="section container"><div class="summary-bar"><div><strong>${esc(label)}</strong></div><span class="timer expired">⏳ ${L('Hold expired','Reservierung abgelaufen')}</span></div><div class="stack"><div class="notice">${L('Your hold has expired. Please search again.','Ihre Reservierung ist abgelaufen. Bitte erneut suchen.')}</div><button class="btn" onclick="go('home')">${L('Search Again','Erneut suchen')}</button></div></section>`;
  return `<section class="section container">
@@ -375,15 +381,14 @@ function bookingS(){
     <div class="promo-row"><input value="${esc(state.promo)}" placeholder="${L('e.g. WELCOME10','z. B. WELCOME10')}" oninput="state.promo=this.value"><button class="btn btn-ghost" onclick="applyPromo()">${L('Apply','Anwenden')}</button></div>
     ${state.promoError?`<div class="inline-error">${esc(state.promoError)}</div>`:''}
     ${state.discount?`<div class="inline-ok">✓ ${esc(state.discount.label)} ${L('applied.','angewendet.')}</div>`:''}
-    <div class="divider"></div>
-    <label class="park-opt"><input type="checkbox" ${state.parking?'checked':''} onclick="state.parking=!state.parking;render()"><span>🅿️ ${L('Add private parking','Privater Parkplatz hinzufügen')} — ${CUR}${PARK_PRICE}/${L('night','Nacht')}</span></label>
+    ${activeExtras().length?`<div class="divider"></div><label class="lbl">${L('Add extras','Extras hinzufügen')}</label>${activeExtras().map(e=>`<label class="park-opt" style="margin-top:8px"><input type="checkbox" ${state.extras[e.id]?'checked':''} onclick="state.extras[${e.id}]=!state.extras[${e.id}];render()"><span>${esc(extraLabel(e))} — ${CUR}${e.price}/${e.per==='night'?L('night','Nacht'):L('stay','Aufenthalt')}</span></label>`).join('')}`:''}
    </div>
    <div class="card pad"><h3 style="margin-top:0">${L('Price summary','Preisübersicht')}</h3>
     <div class="breakdown">
      ${b.unitIds.map(id=>{const u=getUnit(id);const p=priceForStay(u,b.checkIn,b.checkOut);return `<div class="line"><span>${esc(u.name)}</span><span>${CUR}${p}</span></div>`}).join('')}
      <div class="line"><span class="muted">${L('Subtotal','Zwischensumme')} (${n} ${L('nights','Nächte')})</span><span class="muted">${CUR}${sub}</span></div>
      ${state.discount?`<div class="line discount"><span>${L('Discount','Rabatt')} (${esc(state.discount.code)})</span><span>−${CUR}${state.discount.amount}</span></div>`:''}
-     ${parkTot>0?`<div class="line"><span>🅿️ ${L('Parking','Parkplatz')} (${n} ${L('nights','Nächte')})</span><span>${CUR}${parkTot}</span></div>`:''}
+     ${selExtras(n).map(e=>`<div class="line"><span>${esc(extraLabel(e))}</span><span>${CUR}${e.amount}</span></div>`).join('')}
      <div class="line grand"><span>${L('Total','Gesamt')}</span><span>${CUR}${total}</span></div>
     </div>
     <button class="btn btn-block" id="contBtn" style="margin-top:16px" onclick="toPayment()" ${(state.guest.name&&state.guest.email&&state.guest.phone)?'':'disabled'}>${L('Continue to Payment','Weiter zur Zahlung')} →</button>
@@ -393,7 +398,7 @@ function bookingS(){
 }
 function syncContinue(){const btn=document.getElementById('contBtn');if(btn)btn.disabled=!(state.guest.name&&state.guest.email&&state.guest.phone)}
 function applyPromo(){const b=currentB(),res=validateDiscount(state.promo,b.nights,b.subtotal);if(res.ok){state.discount=res;state.promoError=''}else{state.discount=null;state.promoError=res.reason}render()}
-function toPayment(){const b=currentB();b.discountCode=state.discount?state.discount.code:null;b.discountAmount=state.discount?state.discount.amount:0;b.parking=state.parking;b.parkingTotal=state.parking?PARK_PRICE*b.nights:0;b.total=b.subtotal-b.discountAmount+b.parkingTotal;b.guestName=state.guest.name;b.guestEmail=state.guest.email;b.guestPhone=state.guest.phone;sbPatch('bookings','id',b.id,{discount_code:b.discountCode,discount_amount:b.discountAmount,total:b.total,guest_name:b.guestName,guest_email:b.guestEmail,guest_phone:b.guestPhone});go('payment')}
+function toPayment(){const b=currentB();b.discountCode=state.discount?state.discount.code:null;b.discountAmount=state.discount?state.discount.amount:0;b.extrasSel=selExtras(b.nights);b.extrasTotal=extrasSum(b.nights);b.total=b.subtotal-b.discountAmount+b.extrasTotal;b.guestName=state.guest.name;b.guestEmail=state.guest.email;b.guestPhone=state.guest.phone;sbPatch('bookings','id',b.id,{discount_code:b.discountCode,discount_amount:b.discountAmount,total:b.total,guest_name:b.guestName,guest_email:b.guestEmail,guest_phone:b.guestPhone});sbPatch('bookings','id',b.id,{extras:b.extrasSel,extras_total:b.extrasTotal});go('payment')}
 
 /* PAYMENT */
 function paymentS(){
@@ -408,7 +413,7 @@ function paymentS(){
     <button class="btn btn-block" id="payBtn" style="margin-top:18px" onclick="pay()">${L('Pay','Zahlen')} ${CUR}${b.total} ${L('Now','jetzt')}</button>
    </div>
    <div class="card pad"><h3 style="margin-top:0">${L('Order summary','Bestellübersicht')}</h3>
-    <div class="breakdown"><div class="line"><span>${L('Subtotal','Zwischensumme')}</span><span>${CUR}${b.subtotal}</span></div>${b.discountAmount>0?`<div class="line discount"><span>${L('Discount','Rabatt')} (${esc(b.discountCode)})</span><span>−${CUR}${b.discountAmount}</span></div>`:''}${b.parkingTotal>0?`<div class="line"><span>🅿️ ${L('Parking','Parkplatz')}</span><span>${CUR}${b.parkingTotal}</span></div>`:''}<div class="line grand"><span>${L('Total due','Zu zahlen')}</span><span>${CUR}${b.total}</span></div></div>
+    <div class="breakdown"><div class="line"><span>${L('Subtotal','Zwischensumme')}</span><span>${CUR}${b.subtotal}</span></div>${b.discountAmount>0?`<div class="line discount"><span>${L('Discount','Rabatt')} (${esc(b.discountCode)})</span><span>−${CUR}${b.discountAmount}</span></div>`:''}${(b.extrasSel||[]).map(e=>`<div class="line"><span>${esc(extraLabel(e))}</span><span>${CUR}${e.amount}</span></div>`).join('')}<div class="line grand"><span>${L('Total due','Zu zahlen')}</span><span>${CUR}${b.total}</span></div></div>
     <p class="muted" style="font-size:13px">${L('Paid in full. No refund on cancellation.','Vollständige Zahlung. Keine Rückerstattung bei Stornierung.')}</p>
    </div>
   </div></section>`
@@ -421,7 +426,7 @@ function confirmationS(){
  return `<section class="section container"><div class="card pad" style="max-width:620px;margin:0 auto;text-align:center">
   <div style="font-size:46px">✓</div><h2 style="margin-top:6px">${L('Booking confirmed','Buchung bestätigt')}</h2><p class="muted">${L('A confirmation has been sent to','Eine Bestätigung wurde gesendet an')} ${esc(b.guestEmail)}.</p>
   <div class="notice" style="background:#eef3ec;border-color:#cfe0cd;color:#3f5f45;text-align:left">${L('Your booking reference:','Ihre Buchungsnummer:')} <strong>${b.ref}</strong><br>${L("Keep this — you'll need it (with your email) to view your booking.",'Bewahren Sie diese auf – Sie benötigen sie (mit Ihrer E-Mail), um Ihre Buchung anzusehen.')}</div>
-  <div class="breakdown" style="text-align:left;margin-top:18px"><div class="line"><span>${b.unitIds.length>1?'Apartments':'Apartment'}</span><strong>${esc(label)}</strong></div><div class="line"><span>${L('Dates','Daten')}</span><span>${fmt(b.checkIn)} → ${fmt(b.checkOut)}</span></div><div class="line"><span>${L('Guests','Gäste')}</span><span>${b.guests}</span></div>${b.parkingTotal>0?`<div class="line"><span>🅿️ ${L('Parking included','Parkplatz inkl.')}</span><span>${CUR}${b.parkingTotal}</span></div>`:''}<div class="line grand"><span>${L('Paid','Bezahlt')}</span><span>${CUR}${b.total}</span></div></div>
+  <div class="breakdown" style="text-align:left;margin-top:18px"><div class="line"><span>${b.unitIds.length>1?'Apartments':'Apartment'}</span><strong>${esc(label)}</strong></div><div class="line"><span>${L('Dates','Daten')}</span><span>${fmt(b.checkIn)} → ${fmt(b.checkOut)}</span></div><div class="line"><span>${L('Guests','Gäste')}</span><span>${b.guests}</span></div>${(b.extrasSel||[]).map(e=>`<div class="line"><span>${esc(extraLabel(e))}</span><span>${CUR}${e.amount}</span></div>`).join('')}<div class="line grand"><span>${L('Paid','Bezahlt')}</span><span>${CUR}${b.total}</span></div></div>
   <div class="divider"></div><div style="text-align:left"><strong>${L('Check-in instructions','Check-in-Hinweise')}</strong><p class="muted" style="margin-top:4px">${L('The address and access details will appear here. (Placeholder — the owner will provide this text.)','Adresse und Zugangsdaten erscheinen hier. (Platzhalter – der Eigentümer stellt diesen Text bereit.)')}</p></div>
   <button class="btn btn-block" style="margin-top:10px" onclick="openMBfor('${b.guestEmail}','${b.ref}')">${L('View My Bookings','Meine Buchungen ansehen')}</button>
  </div></section>`
@@ -475,6 +480,7 @@ function adminLayout(){
  else if(state.adminTab==='tasks')main=admTasks();
  else if(state.adminTab==='invoices')main=admInvoices();
  else if(state.adminTab==='assistant')main=admFaqs();
+ else if(state.adminTab==='extras')main=admExtras();
  return `<div class="admin-top"><div class="brand">☁ my Vienna Stay · Cockpit</div><div><a onclick="go('home')">↗ View booking site</a><a onclick="adminLogout()">Log out</a></div></div>
  <div class="admin-layout">
   <nav class="admin-side">
@@ -485,6 +491,7 @@ function adminLayout(){
    <div class="grp">Manage</div>
    <a class="${A('apartments')}" onclick="adminGo('apartments')">⌂ Apartments</a>
    <a class="${A('prices')}" onclick="adminGo('prices')">€ Prices & discounts</a>
+   <a class="${A('extras')}" onclick="adminGo('extras')">➕ Extras</a>
    <a class="${A('guests')}" onclick="adminGo('guests')">👤 Guests</a>
    <a class="${A('tasks')}" onclick="adminGo('tasks')">✓ Tasks</a>
    <a class="${A('invoices')}" onclick="adminGo('invoices')">▧ Invoices</a>
@@ -661,6 +668,16 @@ function admFaqs(){
 }
 async function addFaq(){const kw=prompt('Keywords that trigger this answer (space-separated, e.g. "breakfast morning food"):');if(!kw)return;const en=prompt('Answer in English:');if(!en)return;const de=prompt('Answer in German (leave blank to reuse the English text):')||en;await sbInsert('faqs',{keywords:kw,answer_en:en,answer_de:de});await reloadFaqs();render()}
 async function delFaq(id){await sbDelete('faqs','id',id);await reloadFaqs();render()}
+
+function admExtras(){
+ const rows=EXTRAS.map(e=>`<tr><td>${esc(e.name_en||'')}</td><td>${esc(e.name_de||'')}</td><td>${CUR}${e.price}</td><td>${e.per==='night'?L('per night','pro Nacht'):L('per stay','pro Aufenthalt')}</td><td><span class="badge ${e.active===false?'cancelled':'confirmed'}">${e.active===false?'Off':'Active'}</span></td><td><button class="btn btn-ghost btn-sm" onclick="toggleExtra(${e.id})">${e.active===false?'Enable':'Disable'}</button> <button class="btn btn-ghost btn-sm" onclick="delExtra(${e.id})">Remove</button></td></tr>`).join('');
+ return `<h1>Extras</h1><div class="muted">Optional add-ons guests can choose during booking — parking, breakfast, baby cot, late check-out and more. Changes go live on the site immediately.</div>
+  <div class="panel"><div style="display:flex;justify-content:space-between;align-items:center"><strong>${EXTRAS.length} extras</strong><button class="btn btn-sm" onclick="addExtra()">+ Add extra</button></div>
+  <div style="overflow-x:auto"><table class="tbl" style="margin-top:8px"><thead><tr><th>Name (EN)</th><th>Name (DE)</th><th>Price</th><th>Charged</th><th>Status</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan=6 class="muted">No extras yet — add one, e.g. parking or breakfast.</td></tr>'}</tbody></table></div></div>`;
+}
+async function addExtra(){const en=prompt('Extra name (English), e.g. "Airport transfer":');if(!en)return;const de=prompt('Extra name (German — leave blank to reuse English):')||en;const price=parseFloat(prompt('Price (number only):','10'))||0;const per=(prompt('Charge per "night" or per "stay"?','night')||'night').toLowerCase().indexOf('stay')>=0?'stay':'night';await sbInsert('extras',{name_en:en,name_de:de,price:price,per:per,active:true,sort:EXTRAS.length+1});await reloadExtras();render()}
+async function toggleExtra(id){const e=EXTRAS.find(x=>x.id===id);const na=e.active===false?true:false;await sbPatch('extras','id',id,{active:na});await reloadExtras();render()}
+async function delExtra(id){await sbDelete('extras','id',id);await reloadExtras();render()}
 
 /* ===== SITE ASSISTANT (answers only from your data + FAQs) ===== */
 const WA_PHONE='436643912693';
