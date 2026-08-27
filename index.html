@@ -97,6 +97,8 @@ h1,h2,h3,.serif{font-family:Georgia,"Times New Roman",serif;letter-spacing:.2px}
 .promo-row{display:flex;gap:8px}
 .promo-row input{flex:1;padding:10px 12px;border:1px solid var(--beige-line);border-radius:9px;background:var(--cream)}
 .inline-error{color:var(--danger);font-size:13px;margin-top:6px}.inline-ok{color:var(--ok);font-size:13px;margin-top:6px}
+.park-opt{display:flex;align-items:center;gap:9px;cursor:pointer;font-size:14px;color:var(--ink);background:var(--cream);border:1px solid var(--beige-line);border-radius:9px;padding:10px 12px}
+.park-opt input{width:17px;height:17px;cursor:pointer}
 .badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600}
 .badge.confirmed{background:#e2efe3;color:var(--ok)}.badge.cancelled{background:#f3d9cf;color:var(--danger-dark)}
 .badge.soft_locked{background:#efe7d6;color:#8a6d1f}
@@ -163,6 +165,7 @@ label.lbl{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;text
 <div id="root"></div>
 <script>
 const CUR='€';
+const PARK_PRICE=15;
 const UNITS=[
  {id:'u1',name:'Ringstrasse Studio',description:'A bright, compact studio steps from the historic Ring boulevard. Perfect for a couple exploring the city.',maxGuests:2,basePricePerNight:95,address:'Universitätsring 4, 1010 Vienna',photo:'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=900&q=70'},
  {id:'u2',name:'Belvedere Apartment',description:'Elegant one-bedroom with a small balcony near the Belvedere gardens. Quiet, classic, comfortable.',maxGuests:3,basePricePerNight:130,address:'Prinz-Eugen-Strasse 12, 1030 Vienna',photo:'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&w=900&q=70'},
@@ -235,7 +238,7 @@ async function reloadCodes(){const c=await sbGet('discount_codes?select=*&order=
 async function reloadBookings(){const b=await sbGet('bookings?select=*');bookings.length=0;b.map(bFromDb).forEach(x=>bookings.push(x))}
 async function loadAll(){await Promise.all([reloadUnits(),reloadSeasons(),reloadCodes(),reloadBookings(),reloadFaqs()]);render()}
 
-const state={screen:'home',checkIn:iso(14),checkOut:iso(17),guests:2,selectedUnitIds:null,bookingId:null,guest:{name:'',email:'',phone:''},promo:'',discount:null,promoError:'',cancelId:null,mb:{email:'',ref:'',searched:false,results:[]},adminTab:'dashboard',adminFilter:'all',adminSearch:'',auser:'',apass:'',adminErr:'',pickerOpen:null,pickerMonth:null,chatOpen:false,chatMsgs:[],lang:(function(){try{return localStorage.getItem('vs-lang')||'en'}catch(e){return 'en'}})()};
+const state={screen:'home',checkIn:iso(14),checkOut:iso(17),guests:2,selectedUnitIds:null,bookingId:null,guest:{name:'',email:'',phone:''},promo:'',discount:null,promoError:'',cancelId:null,mb:{email:'',ref:'',searched:false,results:[]},adminTab:'dashboard',adminFilter:'all',adminSearch:'',auser:'',apass:'',adminErr:'',pickerOpen:null,pickerMonth:null,chatOpen:false,chatMsgs:[],parking:false,lang:(function(){try{return localStorage.getItem('vs-lang')||'en'}catch(e){return 'en'}})()};
 let adminAuthed=false;
 const ADMIN_USER='manager',ADMIN_PASS='vienna2026';
 const L=(en,de)=>state.lang==='de'?de:en;
@@ -347,7 +350,7 @@ function startBooking(){
  const n=nights(state.checkIn,state.checkOut),sub=comboPrice(ids,state.checkIn,state.checkOut),now=new Date();
  const b={id:'b'+now.getTime(),ref:makeRef(),status:'soft_locked',lockExpiresAt:new Date(now.getTime()+600000).toISOString(),createdAt:now.toISOString(),unitIds:ids,checkIn:state.checkIn,checkOut:state.checkOut,nights:n,guests:state.guests,subtotal:sub,total:sub,discountAmount:0,discountCode:null};
  bookings.push(b);sbInsert('bookings',bToDb(b));
- state.bookingId=b.id;state.guest={name:'',email:'',phone:''};state.promo='';state.discount=null;state.promoError='';
+ state.bookingId=b.id;state.guest={name:'',email:'',phone:''};state.promo='';state.discount=null;state.promoError='';state.parking=false;
  go('booking');
 }
 
@@ -355,7 +358,7 @@ function startBooking(){
 function currentB(){return bookings.find(b=>b.id===state.bookingId)}
 function remainSecs(){const b=currentB();return b?Math.round((new Date(b.lockExpiresAt)-new Date())/1000):0}
 function bookingS(){
- const b=currentB(),n=b.nights,sub=b.subtotal,expired=remainSecs()<=0,total=sub-(state.discount?state.discount.amount:0);
+ const b=currentB(),n=b.nights,sub=b.subtotal,expired=remainSecs()<=0,parkTot=state.parking?PARK_PRICE*n:0,total=sub-(state.discount?state.discount.amount:0)+parkTot;
  const label=unitsLabel(b);
  if(expired)return `<section class="section container"><div class="summary-bar"><div><strong>${esc(label)}</strong></div><span class="timer expired">⏳ ${L('Hold expired','Reservierung abgelaufen')}</span></div><div class="stack"><div class="notice">${L('Your hold has expired. Please search again.','Ihre Reservierung ist abgelaufen. Bitte erneut suchen.')}</div><button class="btn" onclick="go('home')">${L('Search Again','Erneut suchen')}</button></div></section>`;
  return `<section class="section container">
@@ -372,12 +375,15 @@ function bookingS(){
     <div class="promo-row"><input value="${esc(state.promo)}" placeholder="${L('e.g. WELCOME10','z. B. WELCOME10')}" oninput="state.promo=this.value"><button class="btn btn-ghost" onclick="applyPromo()">${L('Apply','Anwenden')}</button></div>
     ${state.promoError?`<div class="inline-error">${esc(state.promoError)}</div>`:''}
     ${state.discount?`<div class="inline-ok">✓ ${esc(state.discount.label)} ${L('applied.','angewendet.')}</div>`:''}
+    <div class="divider"></div>
+    <label class="park-opt"><input type="checkbox" ${state.parking?'checked':''} onclick="state.parking=!state.parking;render()"><span>🅿️ ${L('Add private parking','Privater Parkplatz hinzufügen')} — ${CUR}${PARK_PRICE}/${L('night','Nacht')}</span></label>
    </div>
    <div class="card pad"><h3 style="margin-top:0">${L('Price summary','Preisübersicht')}</h3>
     <div class="breakdown">
      ${b.unitIds.map(id=>{const u=getUnit(id);const p=priceForStay(u,b.checkIn,b.checkOut);return `<div class="line"><span>${esc(u.name)}</span><span>${CUR}${p}</span></div>`}).join('')}
      <div class="line"><span class="muted">${L('Subtotal','Zwischensumme')} (${n} ${L('nights','Nächte')})</span><span class="muted">${CUR}${sub}</span></div>
      ${state.discount?`<div class="line discount"><span>${L('Discount','Rabatt')} (${esc(state.discount.code)})</span><span>−${CUR}${state.discount.amount}</span></div>`:''}
+     ${parkTot>0?`<div class="line"><span>🅿️ ${L('Parking','Parkplatz')} (${n} ${L('nights','Nächte')})</span><span>${CUR}${parkTot}</span></div>`:''}
      <div class="line grand"><span>${L('Total','Gesamt')}</span><span>${CUR}${total}</span></div>
     </div>
     <button class="btn btn-block" id="contBtn" style="margin-top:16px" onclick="toPayment()" ${(state.guest.name&&state.guest.email&&state.guest.phone)?'':'disabled'}>${L('Continue to Payment','Weiter zur Zahlung')} →</button>
@@ -387,7 +393,7 @@ function bookingS(){
 }
 function syncContinue(){const btn=document.getElementById('contBtn');if(btn)btn.disabled=!(state.guest.name&&state.guest.email&&state.guest.phone)}
 function applyPromo(){const b=currentB(),res=validateDiscount(state.promo,b.nights,b.subtotal);if(res.ok){state.discount=res;state.promoError=''}else{state.discount=null;state.promoError=res.reason}render()}
-function toPayment(){const b=currentB();b.discountCode=state.discount?state.discount.code:null;b.discountAmount=state.discount?state.discount.amount:0;b.total=b.subtotal-b.discountAmount;b.guestName=state.guest.name;b.guestEmail=state.guest.email;b.guestPhone=state.guest.phone;sbPatch('bookings','id',b.id,{discount_code:b.discountCode,discount_amount:b.discountAmount,total:b.total,guest_name:b.guestName,guest_email:b.guestEmail,guest_phone:b.guestPhone});go('payment')}
+function toPayment(){const b=currentB();b.discountCode=state.discount?state.discount.code:null;b.discountAmount=state.discount?state.discount.amount:0;b.parking=state.parking;b.parkingTotal=state.parking?PARK_PRICE*b.nights:0;b.total=b.subtotal-b.discountAmount+b.parkingTotal;b.guestName=state.guest.name;b.guestEmail=state.guest.email;b.guestPhone=state.guest.phone;sbPatch('bookings','id',b.id,{discount_code:b.discountCode,discount_amount:b.discountAmount,total:b.total,guest_name:b.guestName,guest_email:b.guestEmail,guest_phone:b.guestPhone});go('payment')}
 
 /* PAYMENT */
 function paymentS(){
@@ -402,7 +408,7 @@ function paymentS(){
     <button class="btn btn-block" id="payBtn" style="margin-top:18px" onclick="pay()">${L('Pay','Zahlen')} ${CUR}${b.total} ${L('Now','jetzt')}</button>
    </div>
    <div class="card pad"><h3 style="margin-top:0">${L('Order summary','Bestellübersicht')}</h3>
-    <div class="breakdown"><div class="line"><span>${L('Subtotal','Zwischensumme')}</span><span>${CUR}${b.subtotal}</span></div>${b.discountAmount>0?`<div class="line discount"><span>${L('Discount','Rabatt')} (${esc(b.discountCode)})</span><span>−${CUR}${b.discountAmount}</span></div>`:''}<div class="line grand"><span>${L('Total due','Zu zahlen')}</span><span>${CUR}${b.total}</span></div></div>
+    <div class="breakdown"><div class="line"><span>${L('Subtotal','Zwischensumme')}</span><span>${CUR}${b.subtotal}</span></div>${b.discountAmount>0?`<div class="line discount"><span>${L('Discount','Rabatt')} (${esc(b.discountCode)})</span><span>−${CUR}${b.discountAmount}</span></div>`:''}${b.parkingTotal>0?`<div class="line"><span>🅿️ ${L('Parking','Parkplatz')}</span><span>${CUR}${b.parkingTotal}</span></div>`:''}<div class="line grand"><span>${L('Total due','Zu zahlen')}</span><span>${CUR}${b.total}</span></div></div>
     <p class="muted" style="font-size:13px">${L('Paid in full. No refund on cancellation.','Vollständige Zahlung. Keine Rückerstattung bei Stornierung.')}</p>
    </div>
   </div></section>`
@@ -415,7 +421,7 @@ function confirmationS(){
  return `<section class="section container"><div class="card pad" style="max-width:620px;margin:0 auto;text-align:center">
   <div style="font-size:46px">✓</div><h2 style="margin-top:6px">${L('Booking confirmed','Buchung bestätigt')}</h2><p class="muted">${L('A confirmation has been sent to','Eine Bestätigung wurde gesendet an')} ${esc(b.guestEmail)}.</p>
   <div class="notice" style="background:#eef3ec;border-color:#cfe0cd;color:#3f5f45;text-align:left">${L('Your booking reference:','Ihre Buchungsnummer:')} <strong>${b.ref}</strong><br>${L("Keep this — you'll need it (with your email) to view your booking.",'Bewahren Sie diese auf – Sie benötigen sie (mit Ihrer E-Mail), um Ihre Buchung anzusehen.')}</div>
-  <div class="breakdown" style="text-align:left;margin-top:18px"><div class="line"><span>${b.unitIds.length>1?'Apartments':'Apartment'}</span><strong>${esc(label)}</strong></div><div class="line"><span>${L('Dates','Daten')}</span><span>${fmt(b.checkIn)} → ${fmt(b.checkOut)}</span></div><div class="line"><span>${L('Guests','Gäste')}</span><span>${b.guests}</span></div><div class="line grand"><span>${L('Paid','Bezahlt')}</span><span>${CUR}${b.total}</span></div></div>
+  <div class="breakdown" style="text-align:left;margin-top:18px"><div class="line"><span>${b.unitIds.length>1?'Apartments':'Apartment'}</span><strong>${esc(label)}</strong></div><div class="line"><span>${L('Dates','Daten')}</span><span>${fmt(b.checkIn)} → ${fmt(b.checkOut)}</span></div><div class="line"><span>${L('Guests','Gäste')}</span><span>${b.guests}</span></div>${b.parkingTotal>0?`<div class="line"><span>🅿️ ${L('Parking included','Parkplatz inkl.')}</span><span>${CUR}${b.parkingTotal}</span></div>`:''}<div class="line grand"><span>${L('Paid','Bezahlt')}</span><span>${CUR}${b.total}</span></div></div>
   <div class="divider"></div><div style="text-align:left"><strong>${L('Check-in instructions','Check-in-Hinweise')}</strong><p class="muted" style="margin-top:4px">${L('The address and access details will appear here. (Placeholder — the owner will provide this text.)','Adresse und Zugangsdaten erscheinen hier. (Platzhalter – der Eigentümer stellt diesen Text bereit.)')}</p></div>
   <button class="btn btn-block" style="margin-top:10px" onclick="openMBfor('${b.guestEmail}','${b.ref}')">${L('View My Bookings','Meine Buchungen ansehen')}</button>
  </div></section>`
