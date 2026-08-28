@@ -232,11 +232,16 @@ let bookings=[];
 const SB_URL='https://rsqpcyuyoizakuxdevph.supabase.co/rest/v1';
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJzcXBjeXV5b2l6YWt1eGRldnBoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0ODU0NTQsImV4cCI6MjEwMzA2MTQ1NH0.9PmOR8WBOma2LTQ6TG3iYeOSeXJ54ZAjk5sSm0z1ULg';
 const SB_H={'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'};
-async function sbGet(q){try{const r=await fetch(SB_URL+'/'+q,{headers:SB_H});return r.ok?await r.json():[]}catch(e){return[]}}
-function sbInsert(t,row){return fetch(SB_URL+'/'+t,{method:'POST',headers:Object.assign({},SB_H,{Prefer:'return=minimal'}),body:JSON.stringify(row)}).catch(function(){})}
-function sbPatch(t,col,val,patch){return fetch(SB_URL+'/'+t+'?'+col+'=eq.'+encodeURIComponent(val),{method:'PATCH',headers:Object.assign({},SB_H,{Prefer:'return=minimal'}),body:JSON.stringify(patch)}).catch(function(){})}
-function sbDelete(t,col,val){return fetch(SB_URL+'/'+t+'?'+col+'=eq.'+encodeURIComponent(val),{method:'DELETE',headers:SB_H}).catch(function(){})}
-function sendMail(id,type){return fetch(SB_URL+'/rpc/send_booking_email',{method:'POST',headers:Object.assign({},SB_H,{'Content-Type':'application/json'}),body:JSON.stringify({p_id:id,p_type:type})}).catch(function(){})}
+const SB_BASE=SB_URL.replace('/rest/v1','');
+let SB_TOKEN=null; /* manager session token; guests stay on the public key */
+function sbH(extra){return Object.assign({apikey:SB_KEY,Authorization:'Bearer '+(SB_TOKEN||SB_KEY),'Content-Type':'application/json'},extra||{})}
+async function sbGet(q){try{const r=await fetch(SB_URL+'/'+q,{headers:sbH()});return r.ok?await r.json():[]}catch(e){return[]}}
+function sbInsert(t,row){return fetch(SB_URL+'/'+t,{method:'POST',headers:sbH({Prefer:'return=minimal'}),body:JSON.stringify(row)}).catch(function(){})}
+function sbPatch(t,col,val,patch){return fetch(SB_URL+'/'+t+'?'+col+'=eq.'+encodeURIComponent(val),{method:'PATCH',headers:sbH({Prefer:'return=minimal'}),body:JSON.stringify(patch)}).catch(function(){})}
+function sbDelete(t,col,val){return fetch(SB_URL+'/'+t+'?'+col+'=eq.'+encodeURIComponent(val),{method:'DELETE',headers:sbH()}).catch(function(){})}
+function sendMail(id,type){return fetch(SB_URL+'/rpc/send_booking_email',{method:'POST',headers:sbH(),body:JSON.stringify({p_id:id,p_type:type})}).catch(function(){})}
+/* every guest-side write now goes through a checked server function */
+async function sbRpc(fn,args){try{const r=await fetch(SB_URL+'/rpc/'+fn,{method:'POST',headers:sbH(),body:JSON.stringify(args||{})});if(!r.ok)return{ok:false,error:'network'};return await r.json()}catch(e){return{ok:false,error:'network'}}}
 const uFromDb=u=>({id:u.id,name:u.name,description:u.description,maxGuests:u.max_guests,basePricePerNight:Number(u.base_price_per_night),address:u.address,photo:u.photo,active:u.active,lat:(u.lat!=null?Number(u.lat):null),lng:(u.lng!=null?Number(u.lng):null)});
 const sFromDb=r=>({id:r.id,unitId:r.unit_id,from:r.from_date,to:r.to_date,price:Number(r.price)});
 const cFromDb=c=>({code:c.code,type:c.type,value:Number(c.value),from:c.from_date,to:c.to_date,minNights:c.min_nights,active:c.active});
@@ -245,6 +250,9 @@ const bToDb=b=>({id:b.id,ref:b.ref,status:b.status,unit_ids:b.unitIds,check_in:b
 async function reloadUnits(){const u=await sbGet('units?select=*&order=id');if(u.length){UNITS.length=0;u.map(uFromDb).forEach(x=>UNITS.push(x))}}
 async function reloadSeasons(){const s=await sbGet('seasonal_rates?select=*&order=id');SEASONAL.length=0;s.map(sFromDb).forEach(x=>SEASONAL.push(x))}
 async function reloadCodes(){const c=await sbGet('discount_codes?select=*&order=code');if(c.length){CODES.length=0;c.map(cFromDb).forEach(x=>CODES.push(x))}}
+/* Public visitors only ever see WHICH dates are taken - never who booked them. */
+async function reloadBusy(){const rows=await sbGet('public_busy?select=*');bookings.length=0;(rows||[]).forEach(function(r){bookings.push({id:null,ref:null,status:'confirmed',unitIds:r.unit_ids||[],checkIn:r.check_in,checkOut:r.check_out})})}
+/* Manager cockpit only - requires a signed-in manager. */
 async function reloadBookings(){const b=await sbGet('bookings?select=*');bookings.length=0;b.map(bFromDb).forEach(x=>bookings.push(x))}
 let EXTRAS=[];
 async function reloadExtras(){const e=await sbGet('extras?select=*&order=sort,id');EXTRAS=e||[]}
@@ -255,11 +263,12 @@ function extrasSum(n){return selExtras(n).reduce(function(s,e){return s+e.amount
 let EMAILS=[];
 async function reloadEmails(){const e=await sbGet('email_templates?select=*&order=sort,id');EMAILS=e||[]}
 function fillTemplate(txt,b){if(!txt)return '';const u=b?unitsLabel(b):'';return String(txt).replace(/\{guest\}/g,(b&&b.guestName)||'').replace(/\{apartment\}/g,u).replace(/\{checkin\}/g,b?fmt(b.checkIn):'').replace(/\{checkout\}/g,b?fmt(b.checkOut):'').replace(/\{nights\}/g,b?b.nights:'').replace(/\{guests\}/g,b?b.guests:'').replace(/\{reference\}/g,(b&&b.ref)||'').replace(/\{total\}/g,b?CUR+b.total:'')}
-async function loadAll(){await Promise.all([reloadUnits(),reloadSeasons(),reloadCodes(),reloadBookings(),reloadFaqs(),reloadExtras(),reloadEmails()]);render()}
+async function loadAll(){await Promise.all([reloadUnits(),reloadSeasons(),reloadBusy(),reloadFaqs(),reloadExtras()]);render()}
+/* Discount codes and email templates are manager data - loaded only after sign-in. */
+async function loadManagerData(){await Promise.all([reloadBookings(),reloadCodes(),reloadEmails()]);render()}
 
 const state={screen:'home',checkIn:iso(14),checkOut:iso(17),guests:2,selectedUnitIds:null,bookingId:null,guest:{name:'',email:'',phone:''},promo:'',discount:null,promoError:'',cancelId:null,mb:{email:'',ref:'',searched:false,results:[]},adminTab:'dashboard',adminFilter:'all',adminSearch:'',auser:'',apass:'',adminErr:'',pickerOpen:null,pickerMonth:null,chatOpen:false,chatMsgs:[],extras:{},emailEdit:null,emailDraft:null,lang:(function(){try{return localStorage.getItem('vs-lang')||'en'}catch(e){return 'en'}})()};
 let adminAuthed=false;
-const ADMIN_USER='manager',ADMIN_PASS='vienna2026';
 const L=(en,de)=>state.lang==='de'?de:en;
 function setLang(l){state.lang=l;try{localStorage.setItem('vs-lang',l)}catch(e){}render()}
 const LOCALE=()=>state.lang==='de'?'de-DE':'en-GB';
@@ -365,12 +374,16 @@ function detailsS(){
    </div></div>
   </div></section>`
 }
-function startBooking(){
+async function startBooking(){
  const ids=state.selectedUnitIds;
- if(ids.some(id=>unitBusy(id,state.checkIn,state.checkOut))){alert(L('Sorry — one of these apartments was just taken for these dates.','Leider wurde eines dieser Apartments gerade für diese Daten gebucht.'));go('results');return}
- const n=nights(state.checkIn,state.checkOut),sub=comboPrice(ids,state.checkIn,state.checkOut),now=new Date();
- const b={id:'b'+now.getTime(),ref:makeRef(),status:'soft_locked',lockExpiresAt:new Date(now.getTime()+600000).toISOString(),createdAt:now.toISOString(),unitIds:ids,checkIn:state.checkIn,checkOut:state.checkOut,nights:n,guests:state.guests,subtotal:sub,total:sub,discountAmount:0,discountCode:null};
- bookings.push(b);sbInsert('bookings',bToDb(b));
+ const taken=L('Sorry — one of these apartments was just taken for these dates.','Leider wurde eines dieser Apartments gerade für diese Daten gebucht.');
+ /* The server re-checks availability and prices the stay itself. */
+ const res=await sbRpc('vs_create_hold',{p_units:ids,p_ci:state.checkIn,p_co:state.checkOut,p_guests:state.guests});
+ if(!res||!res.ok){
+  if(res&&res.error==='taken'){alert(taken);await reloadBusy();go('results');return}
+  alert(L('Sorry, we could not start this booking. Please try again.','Die Buchung konnte nicht gestartet werden. Bitte erneut versuchen.'));return}
+ const b={id:res.id,ref:res.ref,status:'soft_locked',lockExpiresAt:res.lock_expires_at,createdAt:new Date().toISOString(),unitIds:ids,checkIn:state.checkIn,checkOut:state.checkOut,nights:res.nights,guests:state.guests,subtotal:Number(res.subtotal),total:Number(res.total),discountAmount:0,discountCode:null,extrasSel:[],extrasTotal:0};
+ bookings.push(b);
  state.bookingId=b.id;state.guest={name:'',email:'',phone:''};state.promo='';state.discount=null;state.promoError='';state.extras={};
  go('booking');
 }
@@ -412,8 +425,32 @@ function bookingS(){
   </div></section>`
 }
 function syncContinue(){const btn=document.getElementById('contBtn');if(btn)btn.disabled=!(state.guest.name&&state.guest.email&&state.guest.phone)}
-function applyPromo(){const b=currentB(),res=validateDiscount(state.promo,b.nights,b.subtotal);if(res.ok){state.discount=res;state.promoError=''}else{state.discount=null;state.promoError=res.reason}render()}
-function toPayment(){const b=currentB();b.discountCode=state.discount?state.discount.code:null;b.discountAmount=state.discount?state.discount.amount:0;b.extrasSel=selExtras(b.nights);b.extrasTotal=extrasSum(b.nights);b.total=b.subtotal-b.discountAmount+b.extrasTotal;b.guestName=state.guest.name;b.guestEmail=state.guest.email;b.guestPhone=state.guest.phone;sbPatch('bookings','id',b.id,{discount_code:b.discountCode,discount_amount:b.discountAmount,total:b.total,guest_name:b.guestName,guest_email:b.guestEmail,guest_phone:b.guestPhone});sbPatch('bookings','id',b.id,{extras:b.extrasSel,extras_total:b.extrasTotal});go('payment')}
+/* The code list never reaches the browser; the server answers yes/no. */
+function promoError(res){
+ if(res&&res.error==='expired')return L('This code has expired.','Dieser Code ist abgelaufen.');
+ if(res&&res.error==='min_nights')return L('This code needs at least '+res.min_nights+' nights.','Dieser Code erfordert mindestens '+res.min_nights+' Nächte.');
+ if(res&&res.error==='network')return L('Could not check the code. Please try again.','Der Code konnte nicht geprüft werden. Bitte erneut versuchen.');
+ return L('This code is not valid.','Dieser Code ist ungültig.');
+}
+async function applyPromo(){
+ const b=currentB();
+ if(!state.promo.trim()){state.discount=null;state.promoError=L('Enter a code.','Bitte Code eingeben.');render();return}
+ const res=await sbRpc('vs_check_promo',{p_code:state.promo,p_nights:b.nights,p_subtotal:b.subtotal});
+ if(res&&res.ok){state.discount={ok:true,code:res.code,amount:Number(res.amount),label:res.type==='percent'?res.value+'%'+L(' off',' Rabatt'):CUR+res.value+L(' off',' Rabatt')};state.promoError=''}
+ else{state.discount=null;state.promoError=promoError(res)}
+ render();
+}
+async function toPayment(){
+ const b=currentB();
+ const extraIds=activeExtras().filter(function(e){return state.extras[e.id]}).map(function(e){return String(e.id)});
+ /* The server recomputes every amount from its own price list. */
+ const res=await sbRpc('vs_set_guest',{p_id:b.id,p_name:state.guest.name,p_email:state.guest.email,p_phone:state.guest.phone,p_code:state.discount?state.discount.code:null,p_extra_ids:extraIds});
+ if(!res||!res.ok){render();return}
+ b.guestName=state.guest.name;b.guestEmail=state.guest.email;b.guestPhone=state.guest.phone;
+ b.discountCode=res.discount_code;b.discountAmount=Number(res.discount_amount||0);
+ b.extrasSel=res.extras||[];b.extrasTotal=Number(res.extras_total||0);b.total=Number(res.total);
+ go('payment');
+}
 
 /* PAYMENT */
 function paymentS(){
@@ -433,7 +470,20 @@ function paymentS(){
    </div>
   </div></section>`
 }
-function pay(){if(remainSecs()<=0)return;const btn=document.getElementById('payBtn');btn.disabled=true;btn.textContent=L('Processing…','Wird verarbeitet…');setTimeout(()=>{const b=currentB();b.status='confirmed';b.paidAt=new Date().toISOString();sbPatch('bookings','id',b.id,{status:'confirmed',paid_at:b.paidAt});sendMail(b.id,'confirmation');go('confirmation')},1200)}
+async function pay(){
+ if(remainSecs()<=0)return;
+ const btn=document.getElementById('payBtn');btn.disabled=true;btn.textContent=L('Processing…','Wird verarbeitet…');
+ const b=currentB();
+ const res=await sbRpc('vs_confirm',{p_id:b.id});
+ if(!res||!res.ok){
+  btn.disabled=false;btn.textContent=L('Pay now','Jetzt bezahlen');
+  alert(res&&res.error==='taken'?L('Sorry — that apartment was just taken. Your card was not charged.','Leider wurde dieses Apartment gerade gebucht. Es wurde nichts abgebucht.')
+                                :L('Your hold has expired. Please search again.','Ihre Reservierung ist abgelaufen. Bitte erneut suchen.'));
+  render();return}
+ b.status='confirmed';b.paidAt=new Date().toISOString();
+ sendMail(b.id,'confirmation');
+ go('confirmation');
+}
 
 /* CONFIRMATION */
 function confirmationS(){
@@ -450,7 +500,11 @@ function confirmationS(){
 /* MY BOOKINGS */
 function openMB(){go('mybookings')}
 function openMBfor(email,ref){state.mb={email,ref,searched:true,results:bookings.filter(b=>b.guestEmail&&b.guestEmail.toLowerCase()===email.toLowerCase()&&b.ref===ref)};go('mybookings')}
-function mbFind(){const e=state.mb.email.trim().toLowerCase(),r=state.mb.ref.trim().toUpperCase();state.mb.results=bookings.filter(b=>b.guestEmail&&b.guestEmail.toLowerCase()===e&&b.ref===r);state.mb.searched=true;state.cancelId=null;render()}
+async function mbFind(){
+ const rows=await sbRpc('vs_lookup',{p_email:state.mb.email,p_ref:state.mb.ref});
+ state.mb.results=Array.isArray(rows)?rows.map(bFromDb):[];
+ state.mb.searched=true;state.cancelId=null;render();
+}
 function mbS(){
  const rows=state.mb.results.map(b=>{const upcoming=D(b.checkIn)>new Date(),canCancel=b.status==='confirmed'&&upcoming;
   let extra='';
@@ -465,20 +519,34 @@ function mbS(){
   ${state.mb.searched&&state.mb.results.length===0?`<div class="empty"><div class="icon">🔍</div><p>${L('No booking found for that email and reference.','Keine Buchung für diese E-Mail und Nummer gefunden.')}</p></div>`:''}
   <div class="stack" style="margin-top:24px">${rows}</div></section>`
 }
-function doCancel(id){const b=bookings.find(x=>x.id===id);b.status='cancelled';b.cancelledAt=new Date().toISOString();sbPatch('bookings','id',id,{status:'cancelled',cancelled_at:b.cancelledAt});state.cancelId=null;mbFind()}
+async function doCancel(id){
+ await sbRpc('vs_cancel',{p_email:state.mb.email,p_ref:state.mb.ref});
+ state.cancelId=null;await mbFind();
+}
 
 /* ===== ADMIN / MANAGER COCKPIT ===== */
-function openAdmin(){if(adminAuthed){state.screen='admin';state.adminTab='dashboard';window.scrollTo(0,0);render();reloadBookings().then(render)}else{state.screen='adminlogin';state.adminErr='';window.scrollTo(0,0);render()}}
+function openAdmin(){if(adminAuthed){state.screen='admin';state.adminTab='dashboard';window.scrollTo(0,0);render();loadManagerData()}else{state.screen='adminlogin';state.adminErr='';window.scrollTo(0,0);render()}}
 function adminLoginS(){return `<section class="section container"><div class="card pad" style="max-width:420px;margin:20px auto">
  <h2 style="margin-top:0">Manager sign-in</h2><p class="muted">This area is for the property owner only.</p>
- <label class="lbl">Username</label><input class="ctrl" value="${esc(state.auser)}" oninput="state.auser=this.value" onkeydown="if(event.key==='Enter')doAdminLogin()">
+ <label class="lbl">Email</label><input class="ctrl" type="email" autocomplete="username" value="${esc(state.auser)}" oninput="state.auser=this.value" onkeydown="if(event.key==='Enter')doAdminLogin()">
  <label class="lbl" style="margin-top:12px">Password</label><input class="ctrl" type="password" oninput="state.apass=this.value" onkeydown="if(event.key==='Enter')doAdminLogin()">
  ${state.adminErr?`<div class="inline-error">${esc(state.adminErr)}</div>`:''}
  <button class="btn btn-block" style="margin-top:16px" onclick="doAdminLogin()">Sign in →</button>
- <p class="muted" style="font-size:12px;margin-top:14px">Demo login — username <strong>manager</strong>, password <strong>vienna2026</strong>. In the live site this becomes real, secure login (each manager their own account).</p>
+ <p class="muted" style="font-size:12px;margin-top:14px">Sign in with your manager account. Forgot your password? Reset it from the Supabase dashboard.</p>
 </div></section>`}
-function doAdminLogin(){if(state.auser===ADMIN_USER&&state.apass===ADMIN_PASS){adminAuthed=true;state.apass='';state.adminErr='';state.screen='admin';state.adminTab='dashboard';window.scrollTo(0,0);render();reloadBookings().then(render)}else{state.adminErr='Wrong username or password.';render()}}
-function adminLogout(){adminAuthed=false;state.auser='';state.apass='';go('home')}
+/* Real accounts now - no password lives in this page any more. */
+async function doAdminLogin(){
+ state.adminErr='';render();
+ try{
+  const r=await fetch(SB_BASE+'/auth/v1/token?grant_type=password',{method:'POST',headers:{apikey:SB_KEY,'Content-Type':'application/json'},body:JSON.stringify({email:state.auser.trim(),password:state.apass})});
+  const d=await r.json();
+  if(!r.ok||!d.access_token){state.adminErr='Wrong email or password.';state.apass='';render();return}
+  SB_TOKEN=d.access_token;adminAuthed=true;state.apass='';
+  state.screen='admin';state.adminTab='dashboard';window.scrollTo(0,0);render();
+  loadManagerData();
+ }catch(e){state.adminErr='Could not reach the server. Please try again.';render()}
+}
+function adminLogout(){SB_TOKEN=null;adminAuthed=false;state.auser='';state.apass='';bookings.length=0;reloadBusy();go('home')}
 function adminGo(tab){state.adminTab=tab;window.scrollTo(0,0);render()}
 function adminLayout(){
  const A=t=>state.adminTab===t?'active':'';
@@ -672,7 +740,7 @@ function admSettings(){
  return `<h1>Settings</h1><div class="muted">Property details and booking rules.</div>
   <div class="panel"><strong>Property</strong><div class="form-grid" style="margin-top:10px"><div><label class="lbl">Name</label><input class="ctrl" value="Vienna Stay Apartments"></div><div><label class="lbl">Currency</label><input class="ctrl" value="EUR (€)"></div><div class="full"><label class="lbl">Address</label><input class="ctrl" value="Vienna, Austria"></div></div></div>
   <div class="panel"><strong>Booking rules</strong><div class="form-grid" style="margin-top:10px"><div><label class="lbl">Minimum nights</label><input class="ctrl" value="2"></div><div><label class="lbl">Hold time (minutes)</label><input class="ctrl" value="10"></div><div><label class="lbl">Payment</label><input class="ctrl" value="Full prepayment"></div><div><label class="lbl">Cancellation</label><input class="ctrl" value="No refund"></div></div></div>
-  <div class="panel"><strong>Manager login</strong><div class="form-grid" style="margin-top:10px"><div><label class="lbl">Username</label><input class="ctrl" value="manager"></div><div><label class="lbl">Password</label><input class="ctrl" type="password" value="vienna2026"></div></div><p class="muted" style="font-size:12px;margin-bottom:0">Demo — in the live system these are stored securely.</p></div>
+  <div class="panel"><strong>Manager login</strong><p class="muted" style="font-size:13px;margin:8px 0 0">Sign-in uses real accounts. Passwords are never stored in this page — they live in the authentication service, hashed. To add another manager or change a password, use the Supabase dashboard (Authentication &rarr; Users).</p></div>
   <div style="margin-top:12px"><button class="btn" onclick="alert('Settings saved (demo).')">Save changes</button></div>`;
 }
 
