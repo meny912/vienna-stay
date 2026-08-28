@@ -481,7 +481,7 @@ async function pay(){
                                 :L('Your hold has expired. Please search again.','Ihre Reservierung ist abgelaufen. Bitte erneut suchen.'));
   render();return}
  b.status='confirmed';b.paidAt=new Date().toISOString();
- sendMail(b.id,'confirmation');
+ /* the confirmation email is sent by the server inside vs_confirm */
  go('confirmation');
 }
 
