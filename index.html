@@ -112,6 +112,8 @@ textarea.ctrl{width:100%;padding:11px 12px;border:1px solid var(--beige-line);bo
 .badge.confirmed{background:#e2efe3;color:var(--ok)}.badge.cancelled{background:#f3d9cf;color:var(--danger-dark)}
 .badge.soft_locked{background:#efe7d6;color:#8a6d1f}
 .empty{text-align:center;padding:60px 20px;color:var(--muted)}.empty .icon{font-size:46px;margin-bottom:10px}
+.aptgroup td{background:var(--cream);font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.4px;padding:7px 10px}
+.ctrl.needs{border-color:#c9873a;background:#fdf6ee}
 .notice{background:#f7e3d6;border:1px solid #eac3ab;color:var(--danger-dark);border-radius:10px;padding:14px 16px;font-size:14px}
 .site-footer{background:var(--brand-darker);color:#e9e2d8;margin-top:50px;padding:26px 0;font-size:14px}
 .site-footer .container{display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px}
@@ -163,6 +165,8 @@ label.lbl{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;text
 .pl thead th{position:sticky;top:0;z-index:3;background:#fff}
 .pl thead th.pl-unit{z-index:4}
 .pl td.free{cursor:pointer;background:#f2f8f2;border:1px solid #fff}
+.pl tr.pl-group td{background:var(--brand-darker);color:#fff;padding:5px 10px;font-size:12px;letter-spacing:.4px;text-transform:uppercase;position:sticky;left:0}
+.pl td.pl-grouphead{background:var(--brand-darker);color:#fff;font-weight:700;z-index:3}
 .pl td.free:hover{background:#cfe8cf}
 .pl td.free.pl-today{background:#d8efd8}
 .pl-inner{cursor:pointer}
@@ -259,7 +263,7 @@ function sbDelete(t,col,val){return fetch(SB_URL+'/'+t+'?'+col+'=eq.'+encodeURIC
 function sendMail(id,type){return fetch(SB_URL+'/rpc/send_booking_email',{method:'POST',headers:sbH(),body:JSON.stringify({p_id:id,p_type:type})}).catch(function(){})}
 /* every guest-side write now goes through a checked server function */
 async function sbRpc(fn,args){try{const r=await fetch(SB_URL+'/rpc/'+fn,{method:'POST',headers:sbH(),body:JSON.stringify(args||{})});if(!r.ok)return{ok:false,error:'network'};return await r.json()}catch(e){return{ok:false,error:'network'}}}
-const uFromDb=u=>({id:u.id,name:u.name,description:u.description,maxGuests:u.max_guests,basePricePerNight:Number(u.base_price_per_night),address:u.address,photo:u.photo,active:u.active,lat:(u.lat!=null?Number(u.lat):null),lng:(u.lng!=null?Number(u.lng):null)});
+const uFromDb=u=>({id:u.id,name:u.name,description:u.description,maxGuests:u.max_guests,basePricePerNight:Number(u.base_price_per_night),address:u.address,photo:u.photo,active:u.active,location:u.location||'',kind:u.kind||'apartment',sort:u.sort,lat:(u.lat!=null?Number(u.lat):null),lng:(u.lng!=null?Number(u.lng):null)});
 const sFromDb=r=>({id:r.id,unitId:r.unit_id,from:r.from_date,to:r.to_date,price:Number(r.price)});
 const cFromDb=c=>({code:c.code,type:c.type,value:Number(c.value),from:c.from_date,to:c.to_date,minNights:c.min_nights,active:c.active});
 const bFromDb=b=>({id:b.id,ref:b.ref,status:b.status,unitIds:b.unit_ids||[],checkIn:b.check_in,checkOut:b.check_out,nights:b.nights,guests:b.guests,subtotal:Number(b.subtotal),discountCode:b.discount_code,discountAmount:Number(b.discount_amount||0),total:Number(b.total),guestName:b.guest_name,guestEmail:b.guest_email,guestPhone:b.guest_phone,source:b.source,lockExpiresAt:b.lock_expires_at,createdAt:b.created_at,paidAt:b.paid_at,cancelledAt:b.cancelled_at,extrasSel:b.extras||[],extrasTotal:Number(b.extras_total||0)});
