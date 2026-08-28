@@ -336,7 +336,7 @@ function homeS(){
   <section class="section container"><h2>${L('Where our apartments are','Wo unsere Apartments liegen')}</h2><p class="sub">${L('Our apartments across central Vienna — click a pin for details.','Unsere Apartments im Zentrum von Wien — für Details auf eine Markierung klicken.')}</p><iframe src="https://www.google.com/maps/d/embed?mid=1lp7TSlRK3eGL1DHRs6jQFbTigz5sjss&ehbc=2E312F" class="locmap" style="border:0" loading="lazy"></iframe></section>`
 }
 function refreshNights(){const n=nights(state.checkIn,state.checkOut),el=document.getElementById('nightsInfo'),btn=document.querySelector('.searchbox .btn');if(btn)btn.disabled=n<2;if(el)el.innerHTML=(n>=2?`<div class="nights-pill">${n} ${L('nights','Nächte')}</div>`:'')+(n>0&&n<2?`<div class="helper">${L('Minimum stay: 2 nights.','Mindestaufenthalt: 2 Nächte.')}</div>`:'')}
-async function doSearch(){if(nights(state.checkIn,state.checkOut)<2)return;await reloadBookings();go('results')}
+async function doSearch(){if(nights(state.checkIn,state.checkOut)<2)return;await (adminAuthed?reloadBookings():reloadBusy());go('results')}
 
 /* RESULTS */
 function resultsS(){
@@ -499,7 +499,7 @@ function confirmationS(){
 
 /* MY BOOKINGS */
 function openMB(){go('mybookings')}
-function openMBfor(email,ref){state.mb={email,ref,searched:true,results:bookings.filter(b=>b.guestEmail&&b.guestEmail.toLowerCase()===email.toLowerCase()&&b.ref===ref)};go('mybookings')}
+async function openMBfor(email,ref){state.mb={email,ref,searched:false,results:[]};go('mybookings');await mbFind()}
 async function mbFind(){
  const rows=await sbRpc('vs_lookup',{p_email:state.mb.email,p_ref:state.mb.ref});
  state.mb.results=Array.isArray(rows)?rows.map(bFromDb):[];
