@@ -158,7 +158,26 @@ label.lbl{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;text
 .cal .today{outline:2px solid var(--teal);outline-offset:-2px}
 .cal table.pl{width:100%}
 .pl th,.pl td{border:1px solid var(--beige-line);height:40px;min-width:42px;text-align:center;padding:0}
-.pl th.pl-unit,.pl td.pl-unit{text-align:left;padding:6px 10px;min-width:180px;white-space:nowrap;font-weight:600;background:#fff;position:sticky;left:0;z-index:1}
+.pl th.pl-unit,.pl td.pl-unit{text-align:left;padding:6px 10px;min-width:190px;white-space:nowrap;font-weight:600;background:#fff;position:sticky;left:0;z-index:2;border-right:1px solid var(--beige-line)}
+.cal{overflow:auto;max-height:calc(100vh - 250px)}
+.pl thead th{position:sticky;top:0;z-index:3;background:#fff}
+.pl thead th.pl-unit{z-index:4}
+.pl td.free{cursor:pointer;background:#f2f8f2;border:1px solid #fff}
+.pl td.free:hover{background:#cfe8cf}
+.pl td.free.pl-today{background:#d8efd8}
+.pl-inner{cursor:pointer}
+.pl-inner:hover{filter:brightness(1.15)}
+.calbar{display:flex;align-items:center;gap:10px;margin:14px 0}
+.calbar select{padding:7px 10px;border:1px solid var(--beige-line);border-radius:8px;font-size:14px;background:#fff}
+.calbar button{padding:7px 13px;border:1px solid var(--beige-line);background:#fff;border-radius:8px;cursor:pointer;font-size:15px}
+.calbar button:hover{background:var(--cream)}
+.ovl{position:fixed;inset:0;background:rgba(40,35,30,.5);display:grid;place-items:center;z-index:50;padding:18px}
+.ovl-card{background:#fff;border-radius:12px;max-width:560px;width:100%;max-height:92vh;overflow:auto;padding:22px}
+.ovl-card h3{margin:0 0 4px}
+.ovl-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.ovl-row .full{grid-column:1/-1}
+.ovl-act{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap}
+.ovl-err{background:#f7e3d6;border:1px solid #eac3ab;color:var(--danger-dark);border-radius:8px;padding:10px 12px;font-size:14px;margin-top:12px}
 .pl th.plday .n{font-weight:700;font-size:14px}.pl th.plday .m{font-size:10px;color:var(--muted)}.pl th.plday .w{font-size:10px;color:var(--muted)}
 .pl .pl-today{background:#e6f5e6}
 .pl td.pl-book{padding:0;text-align:left}
@@ -259,7 +278,7 @@ function fillTemplate(txt,b){if(!txt)return '';const u=b?unitsLabel(b):'';return
 async function loadAll(){await Promise.all([reloadUnits(),reloadSeasons(),reloadBusy(),reloadFaqs(),reloadExtras()]);render()}
 
 
-const state={screen:'home',checkIn:iso(14),checkOut:iso(17),guests:2,selectedUnitIds:null,bookingId:null,guest:{name:'',email:'',phone:''},promo:'',discount:null,promoError:'',cancelId:null,mb:{email:'',ref:'',searched:false,results:[]},adminTab:'dashboard',adminFilter:'all',adminSearch:'',auser:'',apass:'',adminErr:'',pickerOpen:null,pickerMonth:null,chatOpen:false,chatMsgs:[],extras:{},emailEdit:null,emailDraft:null,lang:(function(){try{return localStorage.getItem('vs-lang')||'en'}catch(e){return 'en'}})()};
+const state={screen:'home',checkIn:iso(14),checkOut:iso(17),guests:2,selectedUnitIds:null,bookingId:null,guest:{name:'',email:'',phone:''},promo:'',discount:null,promoError:'',cancelId:null,mb:{email:'',ref:'',searched:false,results:[]},adminTab:'dashboard',adminFilter:'all',adminSearch:'',auser:'',apass:'',adminErr:'',pickerOpen:null,pickerMonth:null,chatOpen:false,chatMsgs:[],extras:{},emailEdit:null,emailDraft:null,calMonth:null,mgr:null,mgrBusy:false,mgrErr:'',lang:(function(){try{return localStorage.getItem('vs-lang')||'en'}catch(e){return 'en'}})()};
 const L=(en,de)=>state.lang==='de'?de:en;
 function setLang(l){state.lang=l;try{localStorage.setItem('vs-lang',l)}catch(e){}render()}
 const LOCALE=()=>state.lang==='de'?'de-DE':'en-GB';
