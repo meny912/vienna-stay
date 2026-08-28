@@ -4,7 +4,6 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Vienna Stay Apartments</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
 <style>
 :root{
   --brand:#8a7d6b;--brand-dark:#6d6153;--brand-darker:#554c41;
@@ -19,6 +18,7 @@ h1,h2,h3,.serif{font-family:Georgia,"Times New Roman",serif;letter-spacing:.2px}
 .site-header .container{display:flex;align-items:center;justify-content:space-between;height:68px}
 .logo{display:flex;align-items:center;gap:12px;cursor:pointer}
 .logo-mark{width:40px;height:40px;border:2px solid #fff;border-radius:6px;display:grid;place-items:center;font-size:20px}
+.logo-mark-img{height:48px;width:auto;display:block}
 .logo-text .l1{font-family:Georgia,serif;font-size:18px;font-weight:700;letter-spacing:1px;display:block;line-height:1.1}
 .logo-text .l2{font-size:11px;letter-spacing:3px;opacity:.85;text-transform:uppercase}
 .nav a{color:#fff;text-decoration:none;margin-left:22px;font-size:15px;opacity:.92;cursor:pointer}
@@ -115,7 +115,7 @@ textarea.ctrl{width:100%;padding:11px 12px;border:1px solid var(--beige-line);bo
 .notice{background:#f7e3d6;border:1px solid #eac3ab;color:var(--danger-dark);border-radius:10px;padding:14px 16px;font-size:14px}
 .site-footer{background:var(--brand-darker);color:#e9e2d8;margin-top:50px;padding:26px 0;font-size:14px}
 .site-footer .container{display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px}
-.site-footer a{color:#fff;cursor:pointer;text-decoration:underline}
+.site-footer a{color:#fff;cursor:pointer;text-decoration:underline} .ig-link{display:inline-flex;align-items:center;gap:7px;text-decoration:none!important;color:#fff}.ig-link:hover{opacity:.8}.ig-link svg{width:19px;height:19px;flex:none}.nav .ig-link{color:#fff}.nav .ig-link svg{width:20px;height:20px}
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.form-grid .full{grid-column:1/-1}
 input.ctrl,select.ctrl{width:100%;padding:11px 12px;border:1px solid var(--beige-line);border-radius:9px;font-size:15px;background:var(--cream);color:var(--ink)}
 label.lbl{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
@@ -172,7 +172,6 @@ label.lbl{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;text
 </head>
 <body>
 <div id="root"></div>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 <script>
 const CUR='€';
 const PARK_PRICE=15;
@@ -285,9 +284,9 @@ function mmss(s){const m=Math.floor(s/60);return m+':'+String(s%60).padStart(2,'
 const unitsLabel=b=>b.unitIds.map(id=>getUnit(id).name).join(' + ');
 
 function header(){return `<header class="site-header"><div class="container">
- <div class="logo" onclick="go('home')"><span class="logo-mark">▤</span><span class="logo-text"><span class="l1">VIENNA STAY</span><span class="l2">Apartments</span></span></div>
- <nav class="nav"><a onclick="go('home')">${L('Home','Startseite')}</a><a onclick="openMB()">${L('My Bookings','Meine Buchungen')}</a><span class="langsw"><a onclick="setLang('en')" class="${state.lang==='en'?'on':''}">EN</a><a onclick="setLang('de')" class="${state.lang==='de'?'on':''}">DE</a></span></nav></div></header>`}
-function footer(){return `<footer class="site-footer"><div class="container"><span>Vienna Stay Apartments</span><span><a onclick="openAdmin()">${L('Manager area','Verwaltung')} →</a></span></div></footer>`}
+ <div class="logo" onclick="go('home')"><img src="logo.svg" class="logo-mark-img" alt="Vienna Stay Apartments"><span class="logo-text"><span class="l1">VIENNA STAY</span><span class="l2">Apartments</span></span></div>
+ <nav class="nav"><a onclick="go('home')">${L('Home','Startseite')}</a><a onclick="openMB()">${L('My Bookings','Meine Buchungen')}</a><a class="ig-link" href="https://www.instagram.com/viennastayapartments" target="_blank" rel="noopener noreferrer" title="Instagram" aria-label="Instagram"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="2.5" width="19" height="19" rx="5.5"/><circle cx="12" cy="12" r="4.2"/><circle cx="17.6" cy="6.4" r="1.15" fill="currentColor" stroke="none"/></svg></a><span class="langsw"><a onclick="setLang('en')" class="${state.lang==='en'?'on':''}">EN</a><a onclick="setLang('de')" class="${state.lang==='de'?'on':''}">DE</a></span></nav></div></header>`}
+function footer(){return `<footer class="site-footer"><div class="container"><span>Vienna Stay Apartments</span><span><a class="ig-link" href="https://www.instagram.com/viennastayapartments" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="2.5" width="19" height="19" rx="5.5"/><circle cx="12" cy="12" r="4.2"/><circle cx="17.6" cy="6.4" r="1.15" fill="currentColor" stroke="none"/></svg><span>@viennastayapartments</span></a></span><span><a onclick="openAdmin()">${L('Manager area','Verwaltung')} →</a></span></div></footer>`}
 
 function render(){
  if(tick){clearInterval(tick);tick=null}
@@ -325,7 +324,7 @@ function homeS(){
    <div class="card pad"><h3>${L('Groups welcome','Gruppen willkommen')}</h3><p class="muted">${L('No cap on guests. For larger parties we bundle apartments together automatically.','Keine Begrenzung der Gästezahl. Für größere Gruppen fassen wir Apartments automatisch zusammen.')}</p></div>
    <div class="card pad"><h3>${L('Simple booking','Einfache Buchung')}</h3><p class="muted">${L("Pick dates and guests, pay once, and you're set — confirmation in seconds.",'Daten und Gäste wählen, einmal bezahlen, fertig – Bestätigung in Sekunden.')}</p></div>
   </div></section>
-  <section class="section container"><h2>${L('Where our apartments are','Wo unsere Apartments liegen')}</h2><p class="sub">${L('Our apartments across central Vienna — click a pin for details.','Unsere Apartments im Zentrum von Wien — für Details auf eine Markierung klicken.')}</p><div id="locmap" class="locmap"></div></section>`
+  <section class="section container"><h2>${L('Where our apartments are','Wo unsere Apartments liegen')}</h2><p class="sub">${L('Our apartments across central Vienna — click a pin for details.','Unsere Apartments im Zentrum von Wien — für Details auf eine Markierung klicken.')}</p><iframe src="https://www.google.com/maps/d/u/1/embed?mid=1lp7TSlRK3eGL1DHRs6jQFbTigz5sjss&ehbc=2E312F" class="locmap" style="border:0" loading="lazy"></iframe></section>`
 }
 function refreshNights(){const n=nights(state.checkIn,state.checkOut),el=document.getElementById('nightsInfo'),btn=document.querySelector('.searchbox .btn');if(btn)btn.disabled=n<2;if(el)el.innerHTML=(n>=2?`<div class="nights-pill">${n} ${L('nights','Nächte')}</div>`:'')+(n>0&&n<2?`<div class="helper">${L('Minimum stay: 2 nights.','Mindestaufenthalt: 2 Nächte.')}</div>`:'')}
 async function doSearch(){if(nights(state.checkIn,state.checkOut)<2)return;await reloadBookings();go('results')}
